@@ -46,6 +46,7 @@ That's it. Claude now follows your whisper on every response. Change it anytime.
 |------|----------|-------------|
 | **[memory-gc](tools/memory-gc.py)** | Python | Memory lifecycle manager with TTL, garbage collection, deduplication, contradiction detection, and promotion. |
 | **[pitfall-tracker](tools/pitfall-tracker.py)** | Python | Track AI mistakes, auto-detect recurring patterns, and generate improvement plans. 3 strikes = flagged. 5 = escalated. |
+| **[frost-scheduler](tools/frost-scheduler/)** | Python | Session-aware task scheduler daemon. Fires tasks on schedule, injects into existing Claude session (preserving context), tracks completion via ack, queues pending work, supports night mode. |
 
 ## Quick Start
 
@@ -111,6 +112,28 @@ python pitfall-tracker.py add \
 
 python pitfall-tracker.py scan   # Detect recurring patterns
 python pitfall-tracker.py evolve # See improvement queue
+```
+
+### Frost Scheduler
+
+```bash
+# One-click install
+python tools/frost-scheduler/install.py
+
+# Edit your schedule
+nano ~/.frost-scheduler/schedule.json
+
+# Start daemon (runs in foreground)
+python ~/.frost-scheduler/frost-scheduler.py
+
+# Check task status
+python ~/.frost-scheduler/frost-scheduler.py --list
+
+# Acknowledge a completed task
+python ~/.frost-scheduler/frost-ack.py ack morning-briefing
+
+# Auto-start on boot (Windows/Linux/macOS)
+python tools/frost-scheduler/install.py --autostart
 ```
 
 ## Philosophy

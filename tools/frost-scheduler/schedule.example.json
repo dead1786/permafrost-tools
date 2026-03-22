@@ -1,0 +1,71 @@
+{
+  "_comment": "frost-scheduler example configuration",
+
+  "trigger_text": "check schedule",
+
+  "wake": {
+    "method": "auto",
+    "window_title": "claude",
+    "claude_command": "claude",
+    "command_template": ""
+  },
+
+  "tasks": [
+    {
+      "id": "morning-briefing",
+      "enabled": true,
+      "schedule": {
+        "type": "daily",
+        "time": "08:00"
+      },
+      "command": "[Scheduled] Good morning. Read today's TODOs and give me a brief status update.",
+      "description": "Daily morning briefing"
+    },
+    {
+      "id": "health-check",
+      "enabled": true,
+      "schedule": {
+        "type": "interval",
+        "minutes": 30,
+        "night_hours": ["00:00", "06:00"],
+        "night_interval_hours": 2
+      },
+      "script": "health-check.py",
+      "description": "System health check every 30min (2h at night)"
+    },
+    {
+      "id": "weekly-review",
+      "enabled": true,
+      "schedule": {
+        "type": "weekly",
+        "day": "friday",
+        "time": "17:00"
+      },
+      "command": "[Scheduled] Generate a weekly progress report from this week's commits and TODOs.",
+      "description": "Friday weekly review"
+    },
+    {
+      "id": "git-auto-commit",
+      "enabled": false,
+      "schedule": {
+        "type": "interval",
+        "hours": 4,
+        "start_after": "09:00",
+        "stop_before": "22:00"
+      },
+      "script_shell": "cd {HOME}/my-project && git add -A && git diff --cached --quiet || git commit -m 'auto-checkpoint'",
+      "description": "Auto-commit checkpoint every 4h during work hours"
+    },
+    {
+      "id": "memory-gc",
+      "enabled": true,
+      "schedule": {
+        "type": "daily",
+        "time": "03:00"
+      },
+      "script": "memory-gc.py",
+      "script_args": ["gc"],
+      "description": "Nightly memory garbage collection"
+    }
+  ]
+}

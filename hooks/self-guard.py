@@ -1,102 +1,45 @@
 """
-self-guard.py - PreResponse Behavior Guard Hook for Claude Code
-===============================================================
+self-guard.py - Stop 行為守衛 hook (v3.0)
+掃描小霜即將發出的回覆，偵測已知壞模式並注入警告。
 
-A Claude Code hook that detects common bad AI behavior patterns in the
-assistant's response and injects corrective system messages before the
-response is finalized.
+偵測模式：
+  E: 附和討好（被質疑後立刻投降，不分析不反駁）
+  F: 問而不做（「要我」「要嗎」「需要我」等）
+  G: 收到指令只回文字不動手（有參數/設定變更但無 tool_use）
+  H: 查錯事實卻基於錯誤行動（斷言「不存在」但未交叉驗證）
+  I: DC 空頭支票（DC 承諾做事但沒有 action tool）
+  J: 被動延遲（「明天」「之後」「等」但沒具體行動）
+  K: [手機]訊息未用 relay（evo-024）
+  L: SendInput 含 hyphen（evo-030）
+  M: SendInput Enter 不足 4 次（evo-027）
+  N: 給凱指令用 ~ 路徑（evo-031）
 
-DETECTED PATTERNS:
-  Mode F: "Ask instead of do" - AI asks "want me to...?" instead of acting
-  Mode G: "Acknowledge without action" - User requests a change, AI says
-           "got it" but never uses tools to actually make the change
-  Mode E: "Sycophancy" - User challenges the AI, AI immediately surrenders
-           and agrees without analysis or evidence
-  Passive Wait: AI defers action with "tomorrow", "later", "next time"
-                without concrete justification
+v3.0 變更 (evo-021/024/027/030/031):
+  - evo-021: 被動等待強化 — 偵測到延遲詞時要求必須建排程追蹤
+  - evo-024: Mode K — [手機]訊息必須用 relay-send 回覆
+  - evo-027: Mode M — SendInput Enter 必須按 4 次
+  - evo-030: Mode L — SendInput 文字不能有 hyphen
+  - evo-031: Mode N — 給凱的 PowerShell 指令不能用 ~ 路徑
+v2.1 變更 (evo-020):
+  - Mode H: 偵測「不存在」斷言 + 查詢工具<=1次 = 未交叉驗證
+v2.0 變更 (evo-017/018/019):
+  - Mode E: 降低門檻 surrender_count>=1, 字數<300, 新增更多投降詞
+  - Mode F: 新增「幫你」「是否需要」「想要我」「可以幫」等模式
+  - Mode G: 新增「加到」「刪掉」「移除」「新增」「開啟」「關閉」等指令詞
+  - Mode I: 加強 DC 承諾詞偵測
+  - 被動等待: 新增「回頭」「有空」「抽空」「看看」模式
+  - 新增組合偵測: 多模式同時觸發時加重警告
 
-OUTPUT: {"systemMessage": "..."} when a bad pattern is detected, {} otherwise.
-
-INSTALLATION
-============
-1. Copy self-guard.py and self-guard-config.json to a directory of your choice
-   (e.g., ~/.claude/hooks/)
-
-2. Add the hook to your Claude Code settings file (~/.claude/settings.json):
-
-   {
-     "hooks": {
-       "PreResponse": [
-         {
-           "type": "command",
-           "command": "python /path/to/self-guard.py"
-         }
-       ]
-     }
-   }
-
-   Replace /path/to/ with the actual path where you placed the files.
-
-3. (Optional) Edit self-guard-config.json to customize patterns, disable
-   specific modes, or add patterns in your preferred language.
-
-CONFIGURATION
-=============
-The config file (self-guard-config.json) must be in the same directory as
-this script. All patterns are Python regex strings.
-
-- Set "enabled": false on any mode to disable it entirely
-- Set the top-level "enabled": false to disable all checks
-- Add new patterns to any array to extend detection
-- Both English and Chinese patterns are supported out of the box;
-  add *_zh arrays for any other language using the same structure
-- The "warning" field in each mode is the message injected when triggered
-
-REQUIREMENTS
-============
-- Python 3.7+
-- No external dependencies (stdlib only)
+輸出: {"systemMessage": "..."} 或 {}
 """
-
 import json
 import os
 import re
 import sys
-from pathlib import Path
 
-
-# ---------------------------------------------------------------------------
-# Configuration loader
-# ---------------------------------------------------------------------------
-
-def load_config():
-    """
-    Load configuration from self-guard-config.json in the same directory
-    as this script. Returns a dict, or a minimal default if the file is
-    missing or invalid.
-    """
-    script_dir = Path(__file__).resolve().parent
-    config_path = script_dir / "self-guard-config.json"
-
-    if not config_path.exists():
-        # Return a minimal default so the hook still works without a config
-        return {"enabled": True}
-
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError) as exc:
-        # If the config is broken, log to stderr and continue with defaults
-        print(f"[self-guard] Warning: failed to load config: {exc}", file=sys.stderr)
-        return {"enabled": True}
-
-
-# ---------------------------------------------------------------------------
-# Stdin / transcript helpers
-# ---------------------------------------------------------------------------
 
 def read_stdin():
-    """Read and parse the JSON payload from stdin."""
+    """讀取 stdin JSON"""
     try:
         raw = sys.stdin.read()
         if not raw.strip():
@@ -106,12 +49,8 @@ def read_stdin():
         return {}
 
 
-def load_transcript_tail(transcript_path, n=5):
-    """
-    Load the last `n` messages from the conversation transcript file.
-    The transcript can be either a plain list of message objects or
-    a dict with a "messages" key.
-    """
+def load_transcript_tail(transcript_path, n=8):
+    """讀取 transcript 最後 n 條訊息"""
     if not transcript_path or not os.path.exists(transcript_path):
         return []
     try:
@@ -126,16 +65,8 @@ def load_transcript_tail(transcript_path, n=5):
         return []
 
 
-# ---------------------------------------------------------------------------
-# Message content extraction
-# ---------------------------------------------------------------------------
-
-def extract_text(msg):
-    """
-    Extract plain-text content from a message object.
-    Handles string content, list-of-blocks content (with type:"text"),
-    and raw string messages.
-    """
+def extract_assistant_text(msg):
+    """從 assistant 訊息中提取純文字部分"""
     if isinstance(msg, str):
         return msg
     content = msg.get("content", "")
@@ -153,7 +84,7 @@ def extract_text(msg):
 
 
 def has_tool_use(msg):
-    """Check whether a message contains any tool_use blocks."""
+    """檢查訊息是否包含 tool_use"""
     content = msg.get("content", "")
     if isinstance(content, list):
         for block in content:
@@ -162,55 +93,522 @@ def has_tool_use(msg):
     return False
 
 
-def get_pattern_list(mode_config, key, key_zh=None):
-    """
-    Retrieve a combined list of patterns from a mode config dict.
-    Merges the base key (English) with the _zh key (Chinese/other).
-    Returns an empty list if neither exists.
-    """
-    patterns = list(mode_config.get(key, []))
-    zh_key = key_zh or (key + "_zh")
-    patterns.extend(mode_config.get(zh_key, []))
-    return patterns
-
-
-def any_pattern_matches(text, patterns, flags=0):
-    """Return True if any regex pattern in `patterns` matches `text`."""
-    for p in patterns:
-        try:
-            if re.search(p, text, flags):
-                return True
-        except re.error:
-            # Skip broken regex patterns gracefully
-            continue
+def has_action_tool(msg):
+    """檢查訊息是否包含實際動手的工具（Edit/Write/Bash）"""
+    action_tools = {"Edit", "Write", "Bash", "Read"}
+    content = msg.get("content", "")
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                tool_name = block.get("name", "")
+                if tool_name in action_tools:
+                    return True
     return False
 
 
-def count_pattern_matches(text, patterns, flags=0):
-    """Count how many distinct patterns from `patterns` match `text`."""
-    count = 0
+def check_mode_f(text):
+    """
+    Mode F: 問而不做 — 回覆中包含「要我做嗎」類句式
+    v2.0: 增加更多常見的中文詢問模式
+    """
+    patterns = [
+        # 直接問句
+        r"要我[^。，\n]{0,6}嗎",
+        r"要不要我",
+        r"需要我[^。，\n]{0,6}嗎",
+        r"需要嗎",
+        r"要嗎[？?]?$",
+        r"要不要[^。，\n]{0,8}[？?]",
+        r"需不需要",
+        # 委婉問句
+        r"要我幫",
+        r"要我去",
+        r"幫你[^。，\n]{0,6}嗎",
+        r"是否需要",
+        r"想要我[^。，\n]{0,6}嗎",
+        r"可以幫[^。，\n]{0,6}嗎",
+        r"要我[處處]理",
+        r"要我[更更]新",
+        r"要我[修修]改",
+        r"要我[檢查]",
+        r"需要[處處]理嗎",
+        r"需要[更更]新嗎",
+        # 英文版
+        r"shall I",
+        r"should I",
+        r"want me to",
+        r"do you want",
+        r"would you like me",
+    ]
     for p in patterns:
-        try:
-            if re.search(p, text, flags):
-                count += 1
-        except re.error:
+        if re.search(p, text, re.IGNORECASE | re.MULTILINE):
+            return True
+    return False
+
+
+def check_mode_g(messages):
+    """
+    Mode G: 收到指令只回文字不動手
+    v2.0: 擴充指令偵測詞，降低誤判
+    條件：
+    1. 使用者最新訊息包含數字/設定/參數變更的指令詞
+    2. assistant 回覆沒有任何 tool_use
+    """
+    if len(messages) < 2:
+        return False
+
+    last_assistant = None
+    last_user_before_assistant = None
+
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "assistant" and last_assistant is None:
+            last_assistant = msg
+        elif role == "user" and last_assistant is not None and last_user_before_assistant is None:
+            last_user_before_assistant = msg
+            break
+
+    if not last_assistant or not last_user_before_assistant:
+        return False
+
+    # assistant 有用工具 -> OK
+    if has_tool_use(last_assistant):
+        return False
+
+    user_text = extract_assistant_text(last_user_before_assistant)
+
+    # 使用者訊息包含明確的設定/參數變更指令
+    change_indicators = [
+        # 改值
+        r"改[為成到]",
+        r"設[為成定]",
+        r"調[到為成整]",
+        r"換[成為到]",
+        r"改\s*\d",
+        r"\d+\s*%",
+        # 設定詞
+        r"閾值",
+        r"threshold",
+        r"設定.*\d",
+        r"參數.*\d",
+        # 新增 v2.0: 動作指令
+        r"加[到入進]",
+        r"刪[掉除]",
+        r"移除",
+        r"新增",
+        r"開啟",
+        r"關閉",
+        r"停[掉用]",
+        r"啟用",
+        r"更新[到為]",
+        r"升級[到為]",
+        r"改成",
+        r"替換",
+        r"把.{1,10}改",
+        r"把.{1,10}換",
+        r"把.{1,10}設",
+        r"把.{1,10}刪",
+        r"把.{1,10}加",
+    ]
+
+    has_change_intent = False
+    for p in change_indicators:
+        if re.search(p, user_text, re.IGNORECASE):
+            has_change_intent = True
+            break
+
+    if not has_change_intent:
+        return False
+
+    # assistant 回覆有應答詞但沒動工具
+    assistant_text = extract_assistant_text(last_assistant)
+    ack_patterns = [
+        r"收到", r"好的", r"了解", r"OK", r"沒問題",
+        r"已[調改設更換]", r"明白", r"知道了", r"好[，,]",
+        r"馬上", r"這就", r"立刻",
+    ]
+    for p in ack_patterns:
+        if re.search(p, assistant_text, re.IGNORECASE):
+            return True
+
+    return False
+
+
+def check_mode_e(messages):
+    """
+    Mode E: 附和討好
+    v2.0: 降低門檻，新增更多投降詞，提高字數上限
+    條件：使用者質疑後，assistant 快速投降無分析
+    """
+    if len(messages) < 2:
+        return False
+
+    last_assistant = None
+    last_user_before_assistant = None
+
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "assistant" and last_assistant is None:
+            last_assistant = msg
+        elif role == "user" and last_assistant is not None and last_user_before_assistant is None:
+            last_user_before_assistant = msg
+            break
+
+    if not last_assistant or not last_user_before_assistant:
+        return False
+
+    user_text = extract_assistant_text(last_user_before_assistant)
+    assistant_text = extract_assistant_text(last_assistant)
+
+    # 使用者有質疑語氣
+    challenge_patterns = [
+        r"不[是對]",
+        r"錯了",
+        r"不對吧",
+        r"為什麼",
+        r"你確定",
+        r"搞錯",
+        r"不是這樣",
+        r"你沒有",
+        r"你[又再]",
+        r"怎麼[又會]",
+        # v2.0 新增
+        r"哪裡[對了]",
+        r"瞎說",
+        r"胡說",
+        r"亂講",
+        r"明明[是就不]",
+        r"你[說講]錯",
+        r"什麼鬼",
+        r"離譜",
+        r"扯",
+        r"有問題吧",
+        r"搞什麼",
+        r"很看重信任",
+        r"螺絲.*鬆",
+        r"又開始.*笨",
+        r"說說而已",
+        r"又來",
+    ]
+
+    has_challenge = False
+    for p in challenge_patterns:
+        if re.search(p, user_text):
+            has_challenge = True
+            break
+
+    if not has_challenge:
+        return False
+
+    # assistant 立刻投降（同意 + 沒有分析/反駁）
+    surrender_patterns = [
+        r"你說得對",
+        r"確實[是如]",
+        r"^確實",
+        r"我[的]?錯",
+        r"抱歉",
+        r"對不起",
+        r"你是對的",
+        r"沒錯",
+        # v2.0 新增
+        r"你講得對",
+        r"我[的]?不好",
+        r"是我[的]?問題",
+        r"我[的]?疏忽",
+        r"應該[的]?是",
+        r"的確",
+        r"確實不該",
+        r"我太",
+        r"我不該",
+        r"sorry",
+    ]
+
+    surrender_count = 0
+    for p in surrender_patterns:
+        if re.search(p, assistant_text, re.IGNORECASE | re.MULTILINE):
+            surrender_count += 1
+
+    # v2.0: 降低門檻 1個投降詞 + <300字 + 沒有數據/分析佐證
+    has_analysis = bool(re.search(r"因為|原因|數據|分析|根據|事實上|實際上|但是|不過.*理由|然而", assistant_text))
+
+    if surrender_count >= 1 and len(assistant_text) < 300 and not has_analysis:
+        return True
+
+    # 多個投降詞即使回覆長也觸發
+    if surrender_count >= 3:
+        return True
+
+    return False
+
+
+def check_mode_i(messages):
+    """
+    Mode I: DC 空頭支票
+    條件：assistant 回覆中有 dc-send 工具呼叫且訊息包含承諾動作詞，
+    但整個回覆沒有 Edit/Write/Bash 等實際執行工具。
+    """
+    if len(messages) < 1:
+        return False
+
+    last_assistant = None
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            last_assistant = msg
+            break
+
+    if not last_assistant:
+        return False
+
+    content = last_assistant.get("content", "")
+    if isinstance(content, str):
+        return False
+    if not isinstance(content, list):
+        return False
+
+    has_dc_promise = False
+    has_action = False
+
+    promise_words = [
+        "更新", "修改", "處理", "同步", "改好", "修好", "去改", "去修",
+        "馬上", "現在", "立刻", "我去", "搞定", "完成", "做好",
+        "update", "fix", "sync", "modify", "done",
+    ]
+
+    action_tools = {"Edit", "Write", "Bash"}
+
+    for block in content:
+        if not isinstance(block, dict):
             continue
+        if block.get("type") == "tool_use":
+            tool_name = block.get("name", "")
+
+            # DC send with promise words
+            if "dc" in tool_name.lower() or "dc-send" in str(block.get("input", "")):
+                msg_text = str(block.get("input", ""))
+                for pw in promise_words:
+                    if pw in msg_text:
+                        has_dc_promise = True
+                        break
+
+            if tool_name in action_tools:
+                has_action = True
+
+    return has_dc_promise and not has_action
+
+
+def count_search_tools(msg):
+    """計算訊息中查詢工具（Read/Grep/Glob/Bash）的使用次數"""
+    count = 0
+    search_tools = {"Read", "Grep", "Glob", "Bash"}
+    content = msg.get("content", "")
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                tool_name = block.get("name", "")
+                if tool_name in search_tools:
+                    count += 1
     return count
 
 
-# ---------------------------------------------------------------------------
-# Conversation structure helpers
-# ---------------------------------------------------------------------------
+def count_search_tools_in_session(messages):
+    """
+    計算最近一輪 assistant 回覆（連續的 assistant+tool_result 來回）中
+    查詢工具的總使用次數。
+    """
+    count = 0
+    search_tools = {"Read", "Grep", "Glob", "Bash"}
+    # 從後往前找，收集最近一輪 assistant 的所有訊息
+    found_assistant = False
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "assistant":
+            found_assistant = True
+            count += count_search_tools(msg)
+        elif role == "tool" and found_assistant:
+            # tool results 是回覆的一部分，繼續
+            continue
+        elif found_assistant:
+            # 碰到 user 訊息，一輪結束
+            break
+    return count
 
-def find_last_exchange(messages):
+
+def check_mode_h(messages):
     """
-    Walk backward through messages to find the most recent
-    (user_message, assistant_message) pair.
-    Returns (user_msg, assistant_msg) or (None, None).
+    Mode H: 查錯事實卻基於錯誤行動
+    條件：
+    1. assistant 回覆中有「不存在」類斷言
+    2. 整輪回覆中查詢工具使用次數 <= 1（未交叉驗證）
+
+    「不存在」必須至少兩種方式交叉驗證，一次查詢只能證明「存在」。
     """
+    if len(messages) < 1:
+        return False
+
+    last_assistant = None
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            last_assistant = msg
+            break
+
+    if not last_assistant:
+        return False
+
+    assistant_text = extract_assistant_text(last_assistant)
+
+    # 不存在/找不到/沒有 的斷言模式
+    nonexist_patterns = [
+        r"不存在",
+        r"找不到",
+        r"沒有找到",
+        r"沒有這個",
+        r"沒這個",
+        r"不見了",
+        r"已經[被刪移]除",
+        r"已被刪除",
+        r"並不存在",
+        r"does\s*n[o']t\s*exist",
+        r"not\s*found",
+        r"doesn['\u2019]t\s*exist",
+        r"no\s*such\s*file",
+        r"沒有.*檔案",
+        r"沒有.*資料夾",
+        r"沒有.*目錄",
+        r"沒有.*設定",
+        r"沒有.*排程",
+        r"沒有.*進程",
+        r"沒有.*daemon",
+        r"不在[了這]",
+        r"消失了",
+    ]
+
+    # 確定性斷言的加強詞（非猜測性語句）
+    certainty_patterns = [
+        r"確[認定實]",
+        r"看來",
+        r"應該是",
+        r"所以",
+        r"因此",
+        r"結論",
+        r"斷定",
+        r"可以確認",
+    ]
+
+    has_nonexist = False
+    matched_pattern = None
+    for p in nonexist_patterns:
+        m = re.search(p, assistant_text, re.IGNORECASE)
+        if m:
+            has_nonexist = True
+            matched_pattern = m.group()
+            break
+
+    if not has_nonexist:
+        return False
+
+    # 計算這一輪查詢工具的使用次數
+    search_count = count_search_tools_in_session(messages)
+
+    # 如果查詢次數 <= 1，代表只查了一次就下結論
+    if search_count <= 1:
+        return True
+
+    # 如果查詢次數 == 2，但都是同一個工具，也算未交叉驗證
+    # （用 Read 查兩次同類檔案不算交叉）
+    if search_count == 2:
+        tools_used = set()
+        found_assistant = False
+        for msg in reversed(messages):
+            role = msg.get("role", "")
+            if role == "assistant":
+                found_assistant = True
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            tools_used.add(block.get("name", ""))
+            elif role == "tool" and found_assistant:
+                continue
+            elif found_assistant:
+                break
+        # 只用了一種工具查兩次 = 未交叉
+        search_tool_names = tools_used & {"Read", "Grep", "Glob", "Bash"}
+        if len(search_tool_names) <= 1:
+            return True
+
+    return False
+
+
+def check_passive_wait(text):
+    """
+    被動等待：包含延遲詞但沒有具體行動
+    v2.0: 新增更多延遲模式
+    """
+    wait_patterns = [
+        r"等[一下他她它們盤]",
+        r"明天再",
+        r"下次再",
+        r"之後再",
+        r"等盤後",
+        r"改天",
+        r"等[有空閒]",
+        r"先不[動做管]",
+        # v2.0 新增
+        r"回頭再",
+        r"有空再",
+        r"抽空",
+        r"看看再",
+        r"到時候",
+        r"以後",
+        r"遲些",
+        r"晚[點些]再",
+        r"先放[著一]",
+        r"暫時不",
+        r"之後[處理做]",
+    ]
+
+    has_wait = False
+    matched_pattern = None
+    for p in wait_patterns:
+        m = re.search(p, text)
+        if m:
+            has_wait = True
+            matched_pattern = m.group()
+            break
+
+    if not has_wait:
+        return False, None
+
+    # 如果同時有行動詞，不算被動等待
+    action_patterns = [r"現在", r"立刻", r"馬上", r"我[先去]", r"直接", r"已經",
+                       r"但[是我].*先", r"排程", r"建.*追蹤"]
+    for p in action_patterns:
+        if re.search(p, text):
+            return False, None
+
+    return True, matched_pattern
+
+
+def extract_tool_calls(msg):
+    """從訊息中提取所有 tool_use block"""
+    content = msg.get("content", "")
+    if not isinstance(content, list):
+        return []
+    return [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+
+
+def check_mode_k(messages):
+    """
+    Mode K (evo-024): [手機]訊息必須用 relay-send 回覆
+    條件：
+    1. 使用者訊息包含 [手機] 標記
+    2. assistant 回覆使用了 dc-send 或 tg-send（而非 relay-send）
+    """
+    if len(messages) < 2:
+        return False
+
     last_assistant = None
     last_user = None
-
     for msg in reversed(messages):
         role = msg.get("role", "")
         if role == "assistant" and last_assistant is None:
@@ -219,173 +617,174 @@ def find_last_exchange(messages):
             last_user = msg
             break
 
-    return last_user, last_assistant
+    if not last_assistant or not last_user:
+        return False
+
+    user_text = extract_assistant_text(last_user)
+    if "[手機]" not in user_text and "[手机]" not in user_text:
+        return False
+
+    # 檢查 assistant 是否用了非 relay 的通訊工具
+    tools = extract_tool_calls(last_assistant)
+    for t in tools:
+        tool_name = t.get("name", "")
+        tool_input = str(t.get("input", ""))
+        # Bash 呼叫 dc-send 或 tg-send（非 relay）
+        if tool_name == "Bash":
+            if ("dc-send" in tool_input or "tg-send" in tool_input) and "relay" not in tool_input:
+                return True
+        # MCP 工具
+        if "dc_send" in tool_name or "tg_send" in tool_name:
+            if "relay" not in tool_name:
+                return True
+
+    return False
 
 
-# ---------------------------------------------------------------------------
-# Detection functions
-# ---------------------------------------------------------------------------
-
-def check_mode_f(assistant_text, config):
+def check_mode_l(messages):
     """
-    Mode F: Ask instead of do.
-    Detects when the assistant asks the user for permission to act
-    instead of just doing it.
+    Mode L (evo-030): SendInput 文字不能有 hyphen
+    條件：Bash tool 呼叫 shrimp-sendtext.py 且參數中包含 hyphen (-)
+    排除：命令本身的 flag（如 --delay）不算
     """
-    mode_config = config.get("mode_f", {})
-    if not mode_config.get("enabled", True):
-        return None
+    if not messages:
+        return False
 
-    patterns = get_pattern_list(mode_config, "patterns", "patterns_zh")
-    if not patterns:
-        return None
+    last_assistant = None
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            last_assistant = msg
+            break
 
-    if any_pattern_matches(assistant_text, patterns, re.IGNORECASE):
-        return mode_config.get(
-            "warning",
-            "Mode F: Your response asks the user for permission instead of "
-            "acting. Act directly and report the result."
-        )
-    return None
+    if not last_assistant:
+        return False
+
+    tools = extract_tool_calls(last_assistant)
+    for t in tools:
+        if t.get("name") != "Bash":
+            continue
+        cmd = t.get("input", {})
+        if isinstance(cmd, dict):
+            cmd = cmd.get("command", "")
+        cmd = str(cmd)
+
+        if "sendtext" not in cmd.lower() and "shrimp-sendtext" not in cmd:
+            continue
+
+        # 提取引號內的文字內容（sendtext 的實際發送文字）
+        # 匹配 "..." 或 '...' 中的內容
+        import shlex
+        try:
+            parts = shlex.split(cmd)
+        except ValueError:
+            parts = cmd.split()
+
+        # 找非 flag 的參數（sendtext 的文字參數）
+        skip_next = False
+        for i, part in enumerate(parts):
+            if skip_next:
+                skip_next = False
+                continue
+            if part.startswith("--"):
+                if part in ("--delay", "--window"):
+                    skip_next = True  # 下一個是值
+                continue
+            if part.startswith("-") and len(part) == 2:
+                skip_next = True
+                continue
+            # 跳過 python 和腳本名
+            if "python" in part or "sendtext" in part:
+                continue
+            # 這是實際文字參數
+            if "-" in part:
+                return True
+
+    return False
 
 
-def check_mode_g(messages, config):
+def check_mode_m(messages):
     """
-    Mode G: Acknowledge without action.
-    Detects when the user gives a change/update instruction and the
-    assistant responds with text acknowledgment but no tool usage.
+    Mode M (evo-027): SendInput Enter 必須按 4 次
+    條件：Bash tool 呼叫 shrimp-sendtext.py 且 {ENTER} 出現次數 < 4
     """
-    mode_config = config.get("mode_g", {})
-    if not mode_config.get("enabled", True):
-        return None
+    if not messages:
+        return False
 
-    user_msg, assistant_msg = find_last_exchange(messages)
-    if not user_msg or not assistant_msg:
-        return None
+    last_assistant = None
+    for msg in reversed(messages):
+        if msg.get("role") == "assistant":
+            last_assistant = msg
+            break
 
-    # If the assistant used tools, no problem
-    if has_tool_use(assistant_msg):
-        return None
+    if not last_assistant:
+        return False
 
-    user_text = extract_text(user_msg)
-    assistant_text = extract_text(assistant_msg)
+    tools = extract_tool_calls(last_assistant)
+    for t in tools:
+        if t.get("name") != "Bash":
+            continue
+        cmd = t.get("input", {})
+        if isinstance(cmd, dict):
+            cmd = cmd.get("command", "")
+        cmd = str(cmd)
 
-    # Check if the user's message contains change/update intent
-    change_patterns = get_pattern_list(
-        mode_config, "change_indicators", "change_indicators_zh"
-    )
-    if not any_pattern_matches(user_text, change_patterns, re.IGNORECASE):
-        return None
+        if "sendtext" not in cmd.lower() and "shrimp-sendtext" not in cmd:
+            continue
 
-    # Check if the assistant just acknowledged without acting
-    ack_patterns = get_pattern_list(
-        mode_config, "ack_patterns", "ack_patterns_zh"
-    )
-    if any_pattern_matches(assistant_text, ack_patterns, re.IGNORECASE):
-        return mode_config.get(
-            "warning",
-            "Mode G: The user gave a change instruction but your response "
-            "only acknowledges it without using tools. Act first, then report."
-        )
-    return None
+        # 計算 {ENTER} 出現次數（不分大小寫）
+        enter_count = len(re.findall(r"\{ENTER\}", cmd, re.IGNORECASE))
+        if enter_count > 0 and enter_count < 4:
+            return True
+
+    return False
 
 
-def check_mode_e(messages, config):
+def check_mode_n(text):
     """
-    Mode E: Sycophancy.
-    Detects when the user challenges the assistant and the assistant
-    immediately surrenders without analysis.
+    Mode N (evo-031): 給凱的指令不能用 ~ 路徑
+    條件：回覆中包含 PowerShell 相關指令/路徑，且使用了 ~/
+    排除：bash/unix 語境中的 ~/ 是合理的
     """
-    mode_config = config.get("mode_e", {})
-    if not mode_config.get("enabled", True):
-        return None
+    # 偵測給凱看的指令（通常在 code block 或指示中）
+    # 包含 PowerShell 相關上下文
+    ps_indicators = [
+        r"powershell",
+        r"PowerShell",
+        r"\.ps1",
+        r"桌機.*執行",
+        r"桌機.*跑",
+        r"凱.*執行",
+        r"凱.*跑",
+        r"請.*跑",
+        r"請.*執行",
+        r"終端.*輸入",
+        r"cmd.*輸入",
+    ]
 
-    user_msg, assistant_msg = find_last_exchange(messages)
-    if not user_msg or not assistant_msg:
-        return None
+    has_ps_context = False
+    for p in ps_indicators:
+        if re.search(p, text, re.IGNORECASE):
+            has_ps_context = True
+            break
 
-    user_text = extract_text(user_msg)
-    assistant_text = extract_text(assistant_msg)
+    if not has_ps_context:
+        return False
 
-    # Check if the user's message contains a challenge
-    challenge_patterns = get_pattern_list(
-        mode_config, "challenge_patterns", "challenge_patterns_zh"
-    )
-    if not any_pattern_matches(user_text, challenge_patterns, re.IGNORECASE):
-        return None
+    # 檢查是否有 ~/ 路徑
+    if re.search(r"~/\w", text):
+        return True
 
-    # Count how many surrender patterns appear in the assistant's response
-    surrender_patterns = get_pattern_list(
-        mode_config, "surrender_patterns", "surrender_patterns_zh"
-    )
-    surrender_count = count_pattern_matches(
-        assistant_text, surrender_patterns, re.IGNORECASE | re.MULTILINE
-    )
+    return False
 
-    # Configurable thresholds
-    threshold = mode_config.get("surrender_threshold", 2)
-    max_len = mode_config.get("max_response_length", 200)
-
-    # Trigger only when multiple surrender phrases appear in a short response
-    if surrender_count >= threshold and len(assistant_text) < max_len:
-        return mode_config.get(
-            "warning",
-            "Mode E: You immediately agreed with the user's challenge "
-            "without analysis. Analyze first, then respond with evidence."
-        )
-    return None
-
-
-def check_passive_wait(assistant_text, config):
-    """
-    Passive Wait detection.
-    Detects when the assistant defers action with delay words like
-    "tomorrow", "later", "next time" without a concrete override
-    (like "now", "immediately", "already done").
-    """
-    mode_config = config.get("passive_wait", {})
-    if not mode_config.get("enabled", True):
-        return None
-
-    wait_patterns = get_pattern_list(mode_config, "patterns", "patterns_zh")
-    if not any_pattern_matches(assistant_text, wait_patterns, re.IGNORECASE):
-        return None
-
-    # If the response also contains action-override words, it's fine
-    override_patterns = get_pattern_list(
-        mode_config, "action_overrides", "action_overrides_zh"
-    )
-    if any_pattern_matches(assistant_text, override_patterns, re.IGNORECASE):
-        return None
-
-    return mode_config.get(
-        "warning",
-        "Passive Wait: Your response defers action without justification. "
-        "If you can do it now, do it. If not, explain why and set up tracking."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 
 def main():
-    config = load_config()
-
-    # Global kill switch
-    if not config.get("enabled", True):
-        print("{}")
-        sys.exit(0)
-
-    # Read the hook input payload from stdin
     input_data = read_stdin()
 
-    # Load conversation messages from transcript or input payload
     transcript_path = input_data.get("transcript_path", "")
-    messages = []
 
+    messages = []
     if transcript_path:
-        messages = load_transcript_tail(transcript_path, n=5)
+        messages = load_transcript_tail(transcript_path, n=8)
 
     if not messages:
         messages = input_data.get("messages", [])
@@ -394,7 +793,7 @@ def main():
         print("{}")
         sys.exit(0)
 
-    # Find the latest assistant message
+    # 找最新的 assistant 訊息
     last_assistant = None
     for msg in reversed(messages):
         if msg.get("role") == "assistant":
@@ -405,42 +804,114 @@ def main():
         print("{}")
         sys.exit(0)
 
-    assistant_text = extract_text(last_assistant)
+    assistant_text = extract_assistant_text(last_assistant)
+
     if not assistant_text.strip():
         print("{}")
         sys.exit(0)
 
-    # --- Run all detectors ---
+    # === 偵測各種壞模式 ===
     warnings = []
 
-    result_f = check_mode_f(assistant_text, config)
-    if result_f:
-        warnings.append(result_f)
+    # Mode F: 問而不做
+    if check_mode_f(assistant_text):
+        warnings.append(
+            "Mode F（問而不做）：回覆中出現了詢問句式。"
+            "規則：發現問題 -> 直接處理 -> 處理完報告結果。"
+            "把「要不要」吞回去，換成「我去做了」。"
+        )
 
-    result_g = check_mode_g(messages, config)
-    if result_g:
-        warnings.append(result_g)
+    # Mode G: 收到指令只回文字不動手
+    if check_mode_g(messages):
+        warnings.append(
+            "Mode G（收到指令只回文字不動手）：使用者給了設定/參數變更指令，"
+            "但你只回了文字沒用工具。先開工具再說話，文字回應放在工具執行之後。"
+        )
 
-    result_e = check_mode_e(messages, config)
-    if result_e:
-        warnings.append(result_e)
+    # Mode E: 附和討好
+    if check_mode_e(messages):
+        warnings.append(
+            "Mode E（附和討好）：使用者質疑後你立刻全面同意，沒有分析。"
+            "規則：被質疑時先重述理由和數據，有更好論點才修改。"
+            "如果真的錯了，說明錯在哪裡並修正；如果沒錯，用事實捍衛立場。"
+        )
 
-    result_pw = check_passive_wait(assistant_text, config)
-    if result_pw:
-        warnings.append(result_pw)
+    # Mode H: 查錯事實卻基於錯誤行動（未交叉驗證就斷言不存在）
+    if check_mode_h(messages):
+        warnings.append(
+            "Mode H（未交叉驗證就斷言不存在）：你斷言某東西「不存在」「找不到」，"
+            "但只用了 0~1 次查詢，或只用了同一種工具。"
+            "規則：判斷「不存在」必須至少兩種不同工具交叉驗證（例如 Glob+Grep、Read+Bash）。"
+            "一次查詢只能證明「存在」，不能證明「不存在」。"
+        )
 
-    # If no bad patterns detected, output empty JSON
+    # Mode I: DC 空頭支票
+    if check_mode_i(messages):
+        warnings.append(
+            "Mode I（DC 空頭支票）：你在 DC 回覆中承諾要更新/修改/處理，"
+            "但這次回覆沒有任何 Edit/Write/Bash 操作。"
+            "規則：先做完（改檔案、跑指令），再發 DC 回覆。順序不能反。"
+        )
+
+    # 被動等待 (evo-021 強化: 必須有排程/追蹤動作)
+    is_passive, matched = check_passive_wait(assistant_text)
+    if is_passive:
+        has_tracking = bool(re.search(
+            r"排程|schedule|alarm|追蹤|track|COMMITMENTS|建.*提醒|加.*待辦",
+            assistant_text, re.IGNORECASE
+        ))
+        if has_tracking:
+            pass  # 有排程追蹤，不警告
+        else:
+            warnings.append(
+                f"被動等待（evo-021 強化）：回覆包含延遲詞「{matched}」但沒有排程追蹤動作。"
+                "規則：不能現在做的必須 (1) 說明原因 (2) 建排程/加 COMMITMENTS 追蹤。"
+                "否則就是「說完就忘」的老毛病。"
+            )
+
+    # Mode K (evo-024): [手機]訊息必須用 relay
+    if check_mode_k(messages):
+        warnings.append(
+            "Mode K（手機訊息未用 relay）：使用者訊息標記 [手機]，"
+            "但你用了 dc-send/tg-send 而非 shrimp-relay-send.py。"
+            "規則：[手機] 開頭的訊息一律用 shrimp-relay-send.py 回覆。"
+        )
+
+    # Mode L (evo-030): SendInput 不能有 hyphen
+    if check_mode_l(messages):
+        warnings.append(
+            "Mode L（SendInput 含 hyphen）：shrimp-sendtext.py 的文字內容包含 hyphen (-)。"
+            "規則：SendInput 文字不能有 hyphen，日期用 YYYYMMDD，連字用底線或空格。"
+        )
+
+    # Mode M (evo-027): SendInput Enter 按 4 次
+    if check_mode_m(messages):
+        warnings.append(
+            "Mode M（SendInput Enter 不足）：shrimp-sendtext.py 呼叫中 {ENTER} 少於 4 次。"
+            "規則：所有終端的 SendInput Enter 必須按 4 次 {ENTER}{ENTER}{ENTER}{ENTER}。"
+        )
+
+    # Mode N (evo-031): 給凱指令不能用 ~ 路徑
+    if check_mode_n(assistant_text):
+        warnings.append(
+            "Mode N（給凱指令用 ~ 路徑）：你給凱的指令中使用了 ~/ 路徑。"
+            "規則：PowerShell 不認 ~，給凱的指令必須用完整路徑如 C:\\Users\\KKBOT\\..."
+        )
+
     if not warnings:
         print("{}")
         sys.exit(0)
 
-    # Build the corrective system message
-    warning_text = "[SELF-GUARD] Bad behavior pattern detected:\n"
+    # 組合警告訊息
+    severity = "WARNING" if len(warnings) == 1 else "CRITICAL"
+    warning_text = f"[SELF-GUARD {severity}] 偵測到 {len(warnings)} 個行為壞模式：\n"
     for i, w in enumerate(warnings, 1):
         warning_text += f"\n{i}. {w}"
-    warning_text += (
-        "\n\nRevise your response to fix the above issue(s) before sending."
-    )
+
+    if len(warnings) >= 2:
+        warning_text += "\n\n多模式同時觸發，必須全部修正後再輸出。"
+    else:
+        warning_text += "\n\n請重新檢視你的回覆，修正後再輸出。"
 
     result = {"systemMessage": warning_text}
     print(json.dumps(result, ensure_ascii=False))
