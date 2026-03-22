@@ -2,32 +2,75 @@
 
 Battle-tested utilities for Claude Code (and other AI coding assistants). Born from running a multi-agent AI team in production — every tool here exists because we hit a real problem and built a real fix.
 
-No fluff. No frameworks. Just drop-in Python scripts that make your AI assistant more disciplined, self-aware, and reliable.
+No fluff. No frameworks. Just drop-in scripts that make your AI assistant more disciplined, self-aware, and reliable.
+
+---
+
+## 🤫 claude-whisper — Dynamic Runtime Instructions
+
+> **CLAUDE.md is your constitution. Whispers are your mood.**
+
+The killer feature. Inject instructions into Claude's context **on every message** — dynamically, mid-session, no restart needed.
+
+```bash
+npm install -g claude-whisper
+claude-whisper init
+claude-whisper add "Always respond in Japanese"
+```
+
+That's it. Claude now follows your whisper on every response. Change it anytime. No restart. No CLAUDE.md editing.
+
+**How we found this:** We dug into Claude Code's source and discovered that `UserPromptSubmit` hooks with exit code 0 inject their stdout directly into the model's context. One `print()` to stdout — that's the entire mechanism.
+
+[Full documentation →](claude-whisper/)
+
+---
 
 ## What's Inside
 
+### Featured
+
+| Tool | Language | What It Does |
+|------|----------|-------------|
+| **[claude-whisper](claude-whisper/)** | Node.js | 🤫 Inject dynamic instructions into every Claude Code interaction. Mid-session behavior control without restarting. |
+
 ### Hooks
 
-| Tool | What It Does |
-|------|-------------|
-| **[self-guard](hooks/)** | PreResponse hook that detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting, passive deferral. Catches the patterns before they reach you. |
+| Tool | Language | What It Does |
+|------|----------|-------------|
+| **[self-guard](hooks/)** | Python | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Catches the patterns before they reach you. |
 
 ### Tools
 
-| Tool | What It Does |
-|------|-------------|
-| **[memory-gc](tools/memory-gc.py)** | Memory lifecycle manager with TTL, garbage collection, deduplication, contradiction detection, and promotion. Your AI's memories expire, get cleaned up, and only the important ones survive. |
-| **[pitfall-tracker](tools/pitfall-tracker.py)** | Track AI mistakes, auto-detect recurring patterns, and generate improvement plans. 3 occurrences = flagged. 5 = escalated. Still happening? Human review. |
+| Tool | Language | What It Does |
+|------|----------|-------------|
+| **[memory-gc](tools/memory-gc.py)** | Python | Memory lifecycle manager with TTL, garbage collection, deduplication, contradiction detection, and promotion. |
+| **[pitfall-tracker](tools/pitfall-tracker.py)** | Python | Track AI mistakes, auto-detect recurring patterns, and generate improvement plans. 3 strikes = flagged. 5 = escalated. |
 
 ## Quick Start
 
-### Self-Guard Hook
+### claude-whisper (Node.js)
 
 ```bash
-# Copy to your hooks directory
-cp hooks/self-guard.py hooks/self-guard-config.json ~/.claude/hooks/
+npm install -g claude-whisper
+claude-whisper init
+claude-whisper add "Be concise. No filler words."
+```
 
-# Add to settings.json
+Verify it works — add a test whisper and see if Claude obeys:
+
+```bash
+claude-whisper add "End every response with the word 'banana'"
+# Send any message to Claude. If it ends with "banana" — it's working.
+claude-whisper rm 1
+```
+
+[Full docs →](claude-whisper/)
+
+### Self-Guard Hook (Python)
+
+```bash
+cp hooks/self-guard.py hooks/self-guard-config.json ~/.claude/hooks/
 ```
 
 Add to `~/.claude/settings.json`:
@@ -45,58 +88,29 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-Now your AI gets a warning injection every time it tries to ask "want me to...?" instead of just doing the work.
-
-### Memory GC
+### Memory GC (Python)
 
 ```bash
-# Copy to wherever you keep scripts
 cp tools/memory-gc.py ~/scripts/
 
-# Add a memory
-python memory-gc.py add --type context --key "api_uses_rest" --value "This project uses REST, not GraphQL" --importance 3
-
-# Run garbage collection (clean expired memories)
-python memory-gc.py gc
-
-# Check for contradictions and duplicates
-python memory-gc.py validate
-
-# Promote frequently-accessed memories
-python memory-gc.py promote --key "api_uses_rest"
-
-# Search
-python memory-gc.py search --query "API"
-
-# See statistics
-python memory-gc.py stats
+python memory-gc.py add --type context --key "api_uses_rest" --value "REST, not GraphQL" --importance 3
+python memory-gc.py gc          # Clean expired memories
+python memory-gc.py validate    # Find contradictions & duplicates
+python memory-gc.py stats       # Overview
 ```
 
-### Pitfall Tracker
+### Pitfall Tracker (Python)
 
 ```bash
 cp tools/pitfall-tracker.py ~/scripts/
 
-# Record a mistake
 python pitfall-tracker.py add \
   --what "Used stale data for code review" \
   --cause "Didn't refresh file before reviewing" \
   --prevention "Always re-read files before commenting on them"
 
-# Scan for recurring patterns and generate improvement items
-python pitfall-tracker.py scan
-
-# See all pitfalls
-python pitfall-tracker.py list
-
-# See pending improvements
-python pitfall-tracker.py evolve
-
-# Mark an improvement as done
-python pitfall-tracker.py done --id evo-001
-
-# Statistics
-python pitfall-tracker.py stats
+python pitfall-tracker.py scan   # Detect recurring patterns
+python pitfall-tracker.py evolve # See improvement queue
 ```
 
 ## Philosophy
@@ -104,35 +118,26 @@ python pitfall-tracker.py stats
 1. **Code over prompts.** A hook that physically blocks bad behavior beats a rule in CLAUDE.md that gets ignored after compact.
 2. **Decay is a feature.** Memories should expire. Old context pollutes new decisions. GC keeps things clean.
 3. **Mistakes are data.** Track them, count them, escalate them. "I'll try harder" doesn't work — systematic prevention does.
-4. **Zero dependencies.** Python 3.8+ standard library only. Copy a file, run it, done.
-5. **Works with any AI.** Built for Claude Code, but the patterns are universal. Adapt the config for Cursor, Copilot, Aider, or whatever you use.
+4. **Zero (or minimal) dependencies.** Python tools use stdlib only. Node.js tools use built-ins only.
+5. **Works with any AI.** Built for Claude Code, but the patterns are universal.
 
 ## Requirements
 
-- Python 3.8+
-- Claude Code (for hooks) or any AI assistant that supports similar hook mechanisms
+- **claude-whisper**: Node.js 18+, Claude Code 1.0+
+- **Python tools**: Python 3.8+, Claude Code (for hooks)
 
 ## Configuration
 
-Each tool is configurable:
-
-- **self-guard**: Edit `self-guard-config.json` to add/remove/customize behavior patterns
-- **memory-gc**: Use `--config` flag or edit `~/.claude/memory-gc-config.json` for TTL values and thresholds
-- **pitfall-tracker**: Use `--pitfalls` and `--queue` flags to customize file locations, `--threshold` for recurrence sensitivity
-
-## Adding Your Own Tools
-
-This is a living toolkit. To add a new tool:
-
-1. Drop a `.py` file in `hooks/` (for Claude Code hooks) or `tools/` (for standalone utilities)
-2. Follow the pattern: zero dependencies, configurable, well-documented CLI
-3. Submit a PR
+- **claude-whisper**: `cw ls` / `cw toggle <id>` to manage whispers. Data in `~/.claude-whisper/`
+- **self-guard**: Edit `self-guard-config.json` to customize behavior patterns
+- **memory-gc**: `--config` flag or `~/.claude/memory-gc-config.json`
+- **pitfall-tracker**: `--pitfalls` and `--queue` flags, `--threshold` for sensitivity
 
 ## Background
 
-These tools were built while managing a team of 7+ AI agents running 24/7 across multiple terminals. The problems they solve — AI sycophancy, memory pollution, recurring mistakes — are universal to anyone using AI coding assistants seriously.
+These tools were built while managing a team of 7+ AI agents running 24/7 across multiple terminals. The problems they solve — dynamic behavior control, AI sycophancy, memory pollution, recurring mistakes — are universal to anyone using AI coding assistants seriously.
 
-If your AI keeps making the same mistakes, keeps agreeing with everything you say, or keeps "forgetting" things after context compression — these tools are for you.
+If your AI keeps ignoring your instructions after context compression, keeps making the same mistakes, or keeps agreeing with everything you say — these tools are for you.
 
 ## License
 

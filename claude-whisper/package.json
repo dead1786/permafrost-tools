@@ -1,0 +1,36 @@
+{
+  "name": "claude-whisper",
+  "version": "1.0.0",
+  "description": "Dynamic runtime instructions for Claude Code. CLAUDE.md is your constitution — whispers are your mood.",
+  "type": "module",
+  "bin": {
+    "claude-whisper": "./bin/cli.mjs",
+    "cw": "./bin/cli.mjs"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "hooks",
+    "ai",
+    "prompt",
+    "context",
+    "dynamic-instructions",
+    "anthropic"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dead1786/permafrost-tools"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "hook/",
+    "LICENSE",
+    "README.md"
+  ]
+}
