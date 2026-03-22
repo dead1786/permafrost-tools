@@ -9,10 +9,14 @@ export function getStoreDir() {
   return STORE_DIR;
 }
 
+
+function isValidWhisper(w) {
+  return w && typeof w.id === 'number' && typeof w.text === 'string' && w.id > 0;
+}
 export function getWhispers() {
   if (!existsSync(STORE_FILE)) return [];
   try {
-    return JSON.parse(readFileSync(STORE_FILE, 'utf-8'));
+    return JSON.parse(readFileSync(STORE_FILE, 'utf-8')).filter(isValidWhisper);
   } catch {
     return [];
   }

@@ -6,7 +6,7 @@ No fluff. No frameworks. Just drop-in scripts that make your AI assistant more d
 
 ---
 
-## 🤫 claude-whisper — Dynamic Runtime Instructions
+## 🤫 claude-whisper‍​‌‍‌​ — Dynamic Runtime Instructions
 
 > **CLAUDE.md is your constitution. Whispers are your mood.**
 

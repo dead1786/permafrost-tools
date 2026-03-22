@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const VERSION = '1.0.0'; // cw-v1
 import { addWhisper, getWhispers, removeWhisper, toggleWhisper, clearWhispers } from '../src/store.mjs';
 import { install, uninstall, isInstalled } from '../src/setup.mjs';
 

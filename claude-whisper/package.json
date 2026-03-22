@@ -32,5 +32,10 @@
     "hook/",
     "LICENSE",
     "README.md"
-  ]
+  ],
+  "config": {
+    "storeVersion": 1,
+    "hookTimeout": 2000
+  },
+  "_schemaVersion": "1.0"
 }
