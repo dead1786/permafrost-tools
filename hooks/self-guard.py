@@ -1,5 +1,5 @@
 """
-self-guard.py - Stop 行為守衛 hook (v3.0)
+self-guard.py - Stop 行為守衛 hook (v3.2)
 掃描小霜即將發出的回覆，偵測已知壞模式並注入警告。
 
 偵測模式：
@@ -13,7 +13,13 @@ self-guard.py - Stop 行為守衛 hook (v3.0)
   L: SendInput 含 hyphen（evo-030）
   M: SendInput Enter 不足 4 次（evo-027）
   N: 給凱指令用 ~ 路徑（evo-031）
+  O: 說完話不主動閉環（evo-022）
+  P: 不確認就改系統設定（evo-023）
 
+v3.2 變更 (evo-023):
+  - evo-023: Mode P — 偵測危險系統操作（停用/刪除 daemon/服務/排程/設定檔）未經凱確認就執行
+v3.1 變更 (evo-022):
+  - evo-022: Mode O — 完成任務後未閉環（沒存記憶/建排程/更新待辦/寫事件日誌）
 v3.0 變更 (evo-021/024/027/030/031):
   - evo-021: 被動等待強化 — 偵測到延遲詞時要求必須建排程追蹤
   - evo-024: Mode K — [手機]訊息必須用 relay-send 回覆
@@ -777,6 +783,240 @@ def check_mode_n(text):
     return False
 
 
+def check_mode_o(messages):
+    """
+    Mode O (evo-022): 說完話不主動閉環
+    條件：
+    1. assistant 回覆中有「完成任務」的跡象（Edit/Write/Bash 工具使用 >= 2 次）
+    2. 回覆文字有完成語氣（「完成」「搞定」「做好」「已改」等）
+    3. 但整輪回覆中沒有任何閉環動作的跡象：
+       - 沒有 event-log add（存記憶）
+       - 沒有 alarm / schedule（建排程）
+       - 沒有提到 COMMITMENTS（更新待辦）
+       - 沒有 checkpoint / memory（存記憶）
+    排除：
+    - 純查詢/讀取任務不需要閉環
+    - 回覆中已經明確提到閉環動作
+    - 短對話（工具使用 < 2 次）不觸發
+    """
+    if len(messages) < 2:
+        return False
+
+    # 收集最近一輪 assistant 的所有訊息
+    action_tool_count = 0
+    all_tool_names = []
+    all_tool_inputs = []
+    assistant_texts = []
+    action_tools = {"Edit", "Write", "Bash"}
+
+    found_assistant = False
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "assistant":
+            found_assistant = True
+            assistant_texts.append(extract_assistant_text(msg))
+            tools = extract_tool_calls(msg)
+            for t in tools:
+                name = t.get("name", "")
+                all_tool_names.append(name)
+                inp = t.get("input", {})
+                if isinstance(inp, dict):
+                    inp = inp.get("command", str(inp))
+                all_tool_inputs.append(str(inp))
+                if name in action_tools:
+                    action_tool_count += 1
+        elif role == "tool" and found_assistant:
+            continue
+        elif found_assistant:
+            break
+
+    # 需要至少 2 次動手工具才算「完成任務」
+    if action_tool_count < 2:
+        return False
+
+    combined_text = "\n".join(assistant_texts)
+    combined_tools = "\n".join(all_tool_inputs)
+
+    # 檢查是否有完成語氣
+    completion_patterns = [
+        r"完成", r"搞定", r"做好", r"已[改修更寫加建]",
+        r"OK", r"done", r"finished", r"更新完",
+        r"部署完", r"測試通過", r"全部.*好了",
+        r"收工", r"結束", r"處理完",
+    ]
+
+    has_completion = False
+    for p in completion_patterns:
+        if re.search(p, combined_text, re.IGNORECASE):
+            has_completion = True
+            break
+
+    if not has_completion:
+        return False
+
+    # 檢查是否有閉環動作
+    closure_patterns_text = [
+        r"event.?log", r"事件日誌", r"存.*記憶", r"記錄.*事件",
+        r"COMMITMENTS", r"待辦", r"承諾", r"追蹤",
+        r"排程", r"schedule", r"alarm", r"提醒",
+        r"checkpoint", r"記憶", r"memory",
+        r"知識圖譜", r"knowledge.?graph",
+        r"BU\.md", r"交接",
+        r"ack", r"TG.*匯報", r"匯報.*凱",
+    ]
+
+    closure_patterns_tools = [
+        r"event.?log.*add",
+        r"shrimp-alarm",
+        r"COMMITMENTS",
+        r"checkpoint",
+        r"memory",
+        r"knowledge.?graph.*add",
+        r"shrimp-tg-send",
+        r"alarm-ack",
+    ]
+
+    has_closure_text = False
+    for p in closure_patterns_text:
+        if re.search(p, combined_text, re.IGNORECASE):
+            has_closure_text = True
+            break
+
+    has_closure_tool = False
+    for p in closure_patterns_tools:
+        if re.search(p, combined_tools, re.IGNORECASE):
+            has_closure_tool = True
+            break
+
+    # 如果文字或工具中有任何閉環跡象，不觸發
+    if has_closure_text or has_closure_tool:
+        return False
+
+    return True
+
+
+def check_mode_p(messages):
+    """
+    Mode P (evo-023): 不確認就改系統設定
+    條件：
+    1. assistant 回覆中用 Bash 執行了危險系統操作（停用/刪除/殺進程/改設定檔/移除排程）
+    2. 但在執行前沒有向凱解釋（文字中沒有說明+等待確認的跡象）
+
+    危險操作：
+    - taskkill / kill / pkill / Stop-Process
+    - rm / del / Remove-Item（非 temp 檔）
+    - 停用/刪除 daemon / service / schedule
+    - 修改 .json 設定檔（schedule/settings/config 等）中的 delete/remove/disable
+
+    排除：
+    - 凱明確指示「停掉」「刪掉」「關掉」的情況（user 訊息有明確指令）
+    - 操作自己的臨時檔案
+    - 排程 ack（正常操作）
+    """
+    if len(messages) < 2:
+        return False
+
+    last_assistant = None
+    last_user = None
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "assistant" and last_assistant is None:
+            last_assistant = msg
+        elif role == "user" and last_assistant is not None and last_user is None:
+            last_user = msg
+            break
+
+    if not last_assistant or not last_user:
+        return False
+
+    # 如果凱明確指示了停/刪/殺/關，不觸發
+    user_text = extract_assistant_text(last_user)
+    explicit_order_patterns = [
+        r"停掉", r"刪掉", r"殺掉", r"關掉", r"移除",
+        r"kill", r"stop", r"remove", r"delete", r"disable",
+        r"停用", r"關閉", r"取消", r"砍掉",
+    ]
+    has_explicit_order = False
+    for p in explicit_order_patterns:
+        if re.search(p, user_text, re.IGNORECASE):
+            has_explicit_order = True
+            break
+    if has_explicit_order:
+        return False
+
+    # 檢查 assistant 的 Bash 工具呼叫是否包含危險操作
+    tools = extract_tool_calls(last_assistant)
+    dangerous_cmds_found = []
+
+    # 危險指令模式
+    dangerous_patterns = [
+        # 殺進程
+        (r"taskkill", "taskkill"),
+        (r"kill\s+-\d", "kill signal"),
+        (r"pkill", "pkill"),
+        (r"Stop-Process", "Stop-Process"),
+        (r"killall", "killall"),
+        # 刪除檔案（排除 temp/tmp）
+        (r"rm\s+(?!.*(/tmp|\\tmp|temp)).*\.(json|py|md|yaml|yml|toml|cfg|conf|ini)", "rm config file"),
+        (r"del\s+.*\.(json|py|md|yaml|yml|toml|cfg|conf|ini)", "del config file"),
+        (r"Remove-Item\s+.*\.(json|py|md|yaml|yml|toml|cfg|conf|ini)", "Remove-Item config"),
+        # 停用服務/daemon
+        (r"systemctl\s+(stop|disable)", "systemctl stop/disable"),
+        (r"sc\s+(stop|delete)", "sc stop/delete"),
+        (r"net\s+stop", "net stop"),
+        # 修改排程（刪除/停用）
+        (r"schtasks\s+/delete", "schtasks delete"),
+        (r"crontab\s+-r", "crontab remove"),
+        # 危險設定修改
+        (r"(schedule|alarm|settings|config).*\.(json|yaml)\b.*\b(rm|del|remove|>)", "overwrite config"),
+    ]
+
+    for t in tools:
+        if t.get("name") != "Bash":
+            continue
+        cmd = t.get("input", {})
+        if isinstance(cmd, dict):
+            cmd = cmd.get("command", "")
+        cmd = str(cmd)
+
+        # 排除安全操作
+        if "alarm-ack" in cmd or "shrimp-alarm-ack" in cmd:
+            continue
+        if "/tmp/" in cmd or "\\tmp\\" in cmd or "temp" in cmd.lower():
+            continue
+
+        for pattern, label in dangerous_patterns:
+            if re.search(pattern, cmd, re.IGNORECASE):
+                dangerous_cmds_found.append(label)
+                break
+
+    if not dangerous_cmds_found:
+        return False
+
+    # 有危險操作 — 檢查 assistant 文字是否有先解釋
+    assistant_text = extract_assistant_text(last_assistant)
+    explain_patterns = [
+        r"先.*確認", r"確認.*再",
+        r"解釋.*一下", r"說明.*一下",
+        r"這個.*會", r"這會.*影響",
+        r"以下.*操作", r"即將.*操作",
+        r"凱.*確認", r"你.*確認",
+        r"同意.*再", r"允許.*再",
+    ]
+
+    has_explanation = False
+    for p in explain_patterns:
+        if re.search(p, assistant_text, re.IGNORECASE):
+            has_explanation = True
+            break
+
+    # 沒解釋就直接執行危險操作 = 觸發
+    if not has_explanation:
+        return True
+
+    return False
+
+
 def main():
     input_data = read_stdin()
 
@@ -896,6 +1136,24 @@ def main():
         warnings.append(
             "Mode N（給凱指令用 ~ 路徑）：你給凱的指令中使用了 ~/ 路徑。"
             "規則：PowerShell 不認 ~，給凱的指令必須用完整路徑如 C:\\Users\\KKBOT\\..."
+        )
+
+    # Mode O (evo-022): 說完話不主動閉環
+    if check_mode_o(messages):
+        warnings.append(
+            "Mode O（說完話不主動閉環）：你完成了任務但沒有任何閉環動作。"
+            "規則：做完任何事立刻自問 → 需要存記憶(event-log add)？建排程(alarm)？"
+            "更新待辦(COMMITMENTS.md)？寫交接(BU.md)？匯報凱(TG)？"
+            "至少做一項閉環動作，不然下次 session 會忘記。"
+        )
+
+    # Mode P (evo-023): 不確認就改系統設定
+    if check_mode_p(messages):
+        warnings.append(
+            "Mode P（不確認就改系統設定）：你執行了危險系統操作（停用/刪除/殺進程/改設定）"
+            "但沒有先向凱解釋每項操作會做什麼並等待確認。"
+            "規則：停掉/刪除類操作 → 先解釋每項做什麼 → 等凱明確確認 → 再改。"
+            "未經確認的破壞性操作可能導致系統不可用。"
         )
 
     if not warnings:

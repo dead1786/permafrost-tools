@@ -47,6 +47,7 @@ That's it. Claude now follows your whisper on every response. Change it anytime.
 | **[memory-gc](tools/memory-gc.py)** | Python | Memory lifecycle manager with TTL, garbage collection, deduplication, contradiction detection, and promotion. |
 | **[pitfall-tracker](tools/pitfall-tracker.py)** | Python | Track AI mistakes, auto-detect recurring patterns, and generate improvement plans. 3 strikes = flagged. 5 = escalated. |
 | **[frost-scheduler](tools/frost-scheduler/)** | Python | Session-aware task scheduler daemon. Fires tasks on schedule, injects into existing Claude session (preserving context), tracks completion via ack, queues pending work, supports night mode. |
+| **[frost-collab](tools/frost-collab/)** | Python | Multi-AI collaboration — dispatch tasks to multiple agents, claim/complete workflow, priority queue, dependency tracking, shared board. No server needed. |
 
 ## Quick Start
 
