@@ -35,6 +35,12 @@ function isWhisperHook(hook) {
 
 export function install() {
   // 1. Copy hook script to ~/.claude-whisper/
+  if (!existsSync(HOOK_SOURCE)) {
+    throw new Error(
+      `Hook source not found: ${HOOK_SOURCE}\n` +
+      `This usually means the package was not installed correctly. Try reinstalling.`
+    );
+  }
   mkdirSync(getStoreDir(), { recursive: true });
   copyFileSync(HOOK_SOURCE, HOOK_DEST);
 
