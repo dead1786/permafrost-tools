@@ -26,6 +26,53 @@ That's it. Claude now follows your whisper on every response. Change it anytime.
 
 ---
 
+---
+
+## 🌐 claude-i18n — Claude Code Command Localization
+
+> **All 55 built-in commands. Fully localized. One command.**
+
+Tired of English-only slash commands? This tool patches Claude Code's `cli.js` to add native language support to every built-in command — names AND descriptions.
+
+```bash
+cd claude-i18n
+python patch.py
+```
+
+Before:
+```
+/clear    Clear conversation history and free up context
+/commit   Create a git commit
+/help     Show help and available commands
+```
+
+After:
+```
+/clear(清除)    清除對話紀錄，釋放上下文空間
+/commit(提交)   建立 Git 提交
+/help(幫助)     顯示幫助與可用指令
+```
+
+Both English AND Chinese trigger words work. Type `/清除` or `/clear` — both execute the same command.
+
+**How it works:** Pure string replacement from a `translations.json` lookup table. No regex, no AST parsing, no fragile pattern matching. Update after a Claude Code version bump? Just run `python patch.py --scan` to find new untranslated commands and add them to the table.
+
+```bash
+python patch.py              # Apply translations
+python patch.py --scan       # Find untranslated commands after update
+python patch.py --restore    # One-click restore from backup
+python patch.py --list       # Show translation table
+python patch.py --dry-run    # Preview without modifying
+```
+
+Currently supports: **Traditional Chinese (繁體中文)**. Adding a new language = adding a new `translations-xx.json` file.
+
+> Requires npm-installed Claude Code (`npm install -g @anthropic-ai/claude-code`). The standalone `.exe` version cannot be patched.
+
+[Full documentation →](claude-i18n/)
+
+---
+
 ## What's Inside
 
 ### Featured
@@ -33,12 +80,13 @@ That's it. Claude now follows your whisper on every response. Change it anytime.
 | Tool | Language | What It Does |
 |------|----------|-------------|
 | **[claude-whisper](claude-whisper/)** | Node.js | 🤫 Inject dynamic instructions into every Claude Code interaction. Mid-session behavior control without restarting. |
+| **[claude-i18n](claude-i18n/)** | Python | 🌐 Localize all 55 Claude Code commands to your language. Names + descriptions. One command to patch, one to restore. |
 
 ### Hooks
 
 | Tool | Language | What It Does |
 |------|----------|-------------|
-| **[self-guard](hooks/)** | Python | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Catches the patterns before they reach you. |
+| **[self-guard](hooks/)** | Python | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Config-driven, 4 detection modes. |
 
 ### Tools
 
