@@ -1,11 +1,10 @@
 """
 Claude Code i18n Patch — 繁體中文化工具
 使用對照表逐一替換字串，不依賴程式碼結構，官方更新後只需更新對照表。
-支援 npm 安裝版（cli.js）與原生安裝版（.exe）。
+僅支援 npm 安裝版（cli.js）。
 
 Usage:
-  python patch.py                    # 自動 patch（npm 版）
-  python patch.py --exe              # patch 原生 .exe 版
+  python patch.py                    # 自動 patch
   python patch.py --dry-run          # 預覽不修改
   python patch.py --restore          # 還原備份
   python patch.py --scan             # 掃描未翻譯的指令
@@ -89,30 +88,6 @@ def find_cli_js():
     for p in candidates:
         if p.exists():
             return p
-    return None
-
-
-def find_exe():
-    """Find Claude Code's native executable."""
-    candidates = [
-        Path.home() / ".local" / "bin" / "claude.exe",
-        Path.home() / "AppData" / "Local" / "Programs" / "claude-code" / "claude.exe",
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-
-    # Try which/where
-    try:
-        result = subprocess.run(
-            ["where", "claude"], capture_output=True, text=True, timeout=5
-        )
-        for line in result.stdout.strip().splitlines():
-            p = Path(line.strip())
-            if p.exists() and p.suffix == ".exe":
-                return p
-    except Exception:
-        pass
     return None
 
 
@@ -203,7 +178,7 @@ def patch(dry_run=False):
     if not cli_js:
         print("ERROR: 找不到 Claude Code 的 cli.js")
         print("請確認已用 npm install -g @anthropic-ai/claude-code 安裝")
-        print("如果使用原生 .exe 版本，請改用: python patch.py --exe")
+        print("注意：僅支援 npm 版，不支援原生 .exe 版（winget）")
         sys.exit(1)
 
     version = get_version(cli_js)
@@ -239,71 +214,17 @@ def patch(dry_run=False):
     print("Patch 完成!")
 
 
-def patch_exe(dry_run=False):
-    """Apply translations to native claude.exe binary."""
-    exe_path = find_exe()
-    if not exe_path:
-        print("ERROR: 找不到 Claude Code 的 claude.exe")
-        print("請確認已安裝原生版本（winget install Anthropic.ClaudeCode）")
-        sys.exit(1)
-
-    print(f"claude.exe: {exe_path} ({exe_path.stat().st_size / 1024 / 1024:.0f} MB)")
-
-    trans = load_translations()
-
-    # Read binary, decode the JS region as UTF-8
-    with open(exe_path, "rb") as f:
-        raw = f.read()
-
-    # The exe contains embedded JS as UTF-8 text
-    # We decode, apply translations, then re-encode
-    text = raw.decode("utf-8", errors="surrogateescape")
-
-    text, changes = apply_translations(text, trans)
-
-    if changes == 0:
-        print("\n已經是最新狀態，無需 patch")
-        return
-
-    print(f"\n共 {changes} 處替換")
-
-    if dry_run:
-        print("(--dry-run 模式，未修改檔案)")
-        return
-
-    # Backup
-    backup_path = exe_path.with_suffix(".exe.bak")
-    if not backup_path.exists():
-        shutil.copy2(exe_path, backup_path)
-        print(f"備份: {backup_path} ({backup_path.stat().st_size / 1024 / 1024:.0f} MB)")
-
-    with open(exe_path, "wb") as f:
-        f.write(text.encode("utf-8", errors="surrogateescape"))
-
-    print("Patch 完成!")
-    print("注意: Claude Code 更新後需要重新 patch")
-
-
-def restore(exe_mode=False):
+def restore():
     """Restore from backup."""
-    if exe_mode:
-        exe_path = find_exe()
-        if not exe_path:
-            print("ERROR: 找不到 claude.exe")
-            sys.exit(1)
-        backup_path = exe_path.with_suffix(".exe.bak")
-        target = exe_path
-    else:
-        cli_js = find_cli_js()
-        if not cli_js:
-            print("ERROR: 找不到 cli.js")
-            sys.exit(1)
-        backup_path = cli_js.with_suffix(".js.bak")
-        target = cli_js
+    cli_js = find_cli_js()
+    if not cli_js:
+        print("ERROR: 找不到 cli.js")
+        sys.exit(1)
+    backup_path = cli_js.with_suffix(".js.bak")
 
     if backup_path.exists():
-        shutil.copy2(backup_path, target)
-        print(f"已還原: {target}")
+        shutil.copy2(backup_path, cli_js)
+        print(f"已還原: {cli_js}")
     else:
         print("ERROR: 找不到備份")
         sys.exit(1)
@@ -380,21 +301,15 @@ def list_translations():
 
 def main():
     args = sys.argv[1:]
-    exe_mode = "--exe" in args
 
     if "--restore" in args:
-        restore(exe_mode=exe_mode)
+        restore()
     elif "--scan" in args:
         scan()
     elif "--list" in args:
         list_translations()
     elif "--dry-run" in args:
-        if exe_mode:
-            patch_exe(dry_run=True)
-        else:
-            patch(dry_run=True)
-    elif exe_mode:
-        patch_exe()
+        patch(dry_run=True)
     else:
         patch()
 

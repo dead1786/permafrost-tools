@@ -2,7 +2,7 @@
 
 一鍵將 Claude Code 全面中文化：78 個指令名稱與說明、187 個思考動畫、完成提示、操作提示，全部翻譯成繁體中文。
 
-支援 **npm 安裝版**（cli.js）和**原生 .exe 版**（winget / standalone）。
+僅支援 **npm 安裝版**（`npm install -g @anthropic-ai/claude-code`）。原生 .exe 版（winget）因 binary patch 不可靠已移除支援。
 
 ## 效果
 
@@ -47,11 +47,9 @@
 ## 安裝需求
 
 - Python 3.8+
-- Claude Code（npm 版或原生 .exe 版皆可）
+- Claude Code npm 版（`npm install -g @anthropic-ai/claude-code`）
 
 ## 使用方式
-
-### npm 安裝版
 
 ```bash
 # 套用中文化
@@ -70,21 +68,6 @@ python patch.py --scan
 python patch.py --list
 ```
 
-### 原生 .exe 版
-
-```bash
-# 套用中文化（需先關閉 Claude Code）
-python patch.py --exe
-
-# 預覽
-python patch.py --exe --dry-run
-
-# 還原
-python patch.py --exe --restore
-```
-
-> **注意：** 原生版 patch 時必須先關閉 Claude Code，否則 .exe 會被鎖住無法寫入。Patch 完成後重新開啟即可。
-
 ## 翻譯覆蓋率
 
 | 類別 | 數量 | 說明 |
@@ -98,11 +81,11 @@ python patch.py --exe --restore
 
 ## 官方更新後怎麼辦？
 
-1. 先還原：`python patch.py --restore`（或 `--exe --restore`）
+1. 先還原：`python patch.py --restore`
 2. 更新 Claude Code
 3. 執行 `python patch.py --scan` 查看是否有新指令
 4. 如果有新指令，在 `translations.json` 中新增翻譯
-5. 重新套用：`python patch.py`（或 `--exe`）
+5. 重新套用：`python patch.py`
 
 ## 新增語言
 
