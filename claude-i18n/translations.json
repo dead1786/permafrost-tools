@@ -155,7 +155,8 @@
     "\"Order Claude Code stickers\"": "\"訂購 Claude Code 貼紙\"",
     "\"Get comments from a GitHub pull request\"": "\"取得 GitHub PR 的評論\"",
     "\"Review changed code for reuse, quality, and efficiency, then": "\"審查程式碼的重用性、品質與效率",
-    "Toggle fast mode (${cI} only)": "切換快速模式（${cI} 專用）"
+    "Toggle fast mode (${cI} only)": "切換快速模式（${cI} 專用）",
+    "\"Upgrade to Max for higher rate limits and more Opus\"": "\"升級至 Max 獲得更高速率限制與更多 Opus\""
   },
 
   "aliases": {
@@ -213,7 +214,7 @@
     "\"Cogitated\"": "\"沉思了\"",
     "\"Cooked\"": "\"烹飪了\"",
     "\"Crunched\"": "\"運算了\"",
-    "\"Saut\\xE9ed\"": "\"嫩煎了\"",
+    "\"Sautéed\"": "\"嫩煎了\"",
     "\"Worked\"": "\"工作了\""
   },
 
