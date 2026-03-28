@@ -79,7 +79,7 @@
     "name:\"web-setup\"": "name:\"web-setup(網頁設定)\"",
     "name:\"nohup\"": "name:\"nohup(背景執行)\"",
     "name:\"sleep\"": "name:\"sleep(等待)\"",
-    "name:\"simplify\"": "name:\"simplify(簡化)\"",
+    "name:\"simplify\"": "name:\"simplify(巡查)\"",
     "name:\"security-review\"": "name:\"security-review(安全審查)\"",
     "name:\"ship-audit\"": "name:\"ship-audit(上線審查)\"",
     "name:\"migration-review\"": "name:\"migration-review(遷移審查)\"",
