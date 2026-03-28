@@ -1,9 +1,11 @@
 """
 Claude Code i18n Patch — 繁體中文化工具
 使用對照表逐一替換字串，不依賴程式碼結構，官方更新後只需更新對照表。
+支援 npm 安裝版（cli.js）與原生安裝版（.exe）。
 
 Usage:
-  python patch.py                    # 自動 patch
+  python patch.py                    # 自動 patch（npm 版）
+  python patch.py --exe              # patch 原生 .exe 版
   python patch.py --dry-run          # 預覽不修改
   python patch.py --restore          # 還原備份
   python patch.py --scan             # 掃描未翻譯的指令
@@ -12,6 +14,7 @@ Usage:
 
 import json
 import os
+import re
 import sys
 import shutil
 import subprocess
@@ -20,9 +23,51 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 TRANSLATIONS_FILE = SCRIPT_DIR / "translations.json"
 
+# 187 English thinking verbs in display order (must match Claude Code source)
+ENGLISH_SPINNERS = [
+    "Accomplishing", "Actioning", "Actualizing", "Architecting", "Baking",
+    "Beaming", "Beboppin'", "Befuddling", "Billowing", "Blanching",
+    "Bloviating", "Boogieing", "Boondoggling", "Booping", "Bootstrapping",
+    "Brewing", "Bunning", "Burrowing", "Calculating", "Canoodling",
+    "Caramelizing", "Cascading", "Catapulting", "Cerebrating", "Channeling",
+    "Channelling", "Choreographing", "Churning", "Clauding", "Coalescing",
+    "Cogitating", "Combobulating", "Composing", "Computing", "Concocting",
+    "Considering", "Contemplating", "Cooking", "Crafting", "Creating",
+    "Crunching", "Crystallizing", "Cultivating", "Deciphering", "Deliberating",
+    "Determining", "Dilly-dallying", "Discombobulating", "Doing", "Doodling",
+    "Drizzling", "Ebbing", "Effecting", "Elucidating", "Embellishing",
+    "Enchanting", "Envisioning", "Evaporating", "Fermenting", "Fiddle-faddling",
+    "Finagling", "Flamb\\xE9ing", "Flibbertigibbeting", "Flowing", "Flummoxing",
+    "Fluttering", "Forging", "Forming", "Frolicking", "Frosting",
+    "Gallivanting", "Galloping", "Garnishing", "Generating", "Gesticulating",
+    "Germinating", "Gitifying", "Grooving", "Gusting", "Harmonizing",
+    "Hashing", "Hatching", "Herding", "Honking", "Hullaballooing",
+    "Hyperspacing", "Ideating", "Imagining", "Improvising", "Incubating",
+    "Inferring", "Infusing", "Ionizing", "Jitterbugging", "Julienning",
+    "Kneading", "Leavening", "Levitating", "Lollygagging", "Manifesting",
+    "Marinating", "Meandering", "Metamorphosing", "Misting", "Moonwalking",
+    "Moseying", "Mulling", "Mustering", "Musing", "Nebulizing",
+    "Nesting", "Newspapering", "Noodling", "Nucleating", "Orbiting",
+    "Orchestrating", "Osmosing", "Perambulating", "Percolating", "Perusing",
+    "Philosophising", "Photosynthesizing", "Pollinating", "Pondering", "Pontificating",
+    "Pouncing", "Precipitating", "Prestidigitating", "Processing", "Proofing",
+    "Propagating", "Puttering", "Puzzling", "Quantumizing", "Razzle-dazzling",
+    "Razzmatazzing", "Recombobulating", "Reticulating", "Roosting", "Ruminating",
+    "Saut\\xE9ing", "Scampering", "Schlepping", "Scurrying", "Seasoning",
+    "Shenaniganing", "Shimmying", "Simmering", "Skedaddling", "Sketching",
+    "Slithering", "Smooshing", "Sock-hopping", "Spelunking", "Spinning",
+    "Sprouting", "Stewing", "Sublimating", "Swirling", "Swooping",
+    "Symbioting", "Synthesizing", "Tempering", "Thinking", "Thundering",
+    "Tinkering", "Tomfoolering", "Topsy-turvying", "Transfiguring", "Transmuting",
+    "Twisting", "Undulating", "Unfurling", "Unravelling", "Vibing",
+    "Waddling", "Wandering", "Warping", "Whatchamacalliting", "Whirlpooling",
+    "Whirring", "Whisking", "Wibbling", "Working", "Wrangling",
+    "Zesting", "Zigzagging",
+]
+
 
 def find_cli_js():
-    """Find Claude Code's cli.js file."""
+    """Find Claude Code's cli.js file (npm version)."""
     try:
         result = subprocess.run(
             ["npm", "root", "-g"],
@@ -47,6 +92,30 @@ def find_cli_js():
     return None
 
 
+def find_exe():
+    """Find Claude Code's native executable."""
+    candidates = [
+        Path.home() / ".local" / "bin" / "claude.exe",
+        Path.home() / "AppData" / "Local" / "Programs" / "claude-code" / "claude.exe",
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+
+    # Try which/where
+    try:
+        result = subprocess.run(
+            ["where", "claude"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.strip().splitlines():
+            p = Path(line.strip())
+            if p.exists() and p.suffix == ".exe":
+                return p
+    except Exception:
+        pass
+    return None
+
+
 def get_version(cli_js_path):
     """Get Claude Code version from package.json."""
     pkg = cli_js_path.parent / "package.json"
@@ -62,12 +131,79 @@ def load_translations():
         return json.load(f)
 
 
+def apply_translations(content, trans, verbose=True):
+    """Apply all translation categories to content. Returns (new_content, change_count)."""
+    changes = 0
+
+    # 1. Command name translations
+    for en, zh in trans.get("names", {}).items():
+        if en in content and zh not in content:
+            content = content.replace(en, zh, 1)
+            if verbose:
+                cmd = en.split('"')[1]
+                zh_name = zh.split('"')[1]
+                print(f"  名稱: /{cmd} → /{zh_name}")
+            changes += 1
+
+    # 2. Description translations
+    for en, zh in trans.get("descriptions", {}).items():
+        if en in content:
+            content = content.replace(en, zh)
+            if verbose:
+                print(f"  說明: {en[:30]}... → {zh[:30]}...")
+            changes += 1
+
+    # 3. Alias injections
+    for en, zh in trans.get("aliases", {}).items():
+        if en in content and zh not in content:
+            content = content.replace(en, zh, 1)
+            changes += 1
+
+    # 4. Thinking spinner verbs (replace entire array)
+    zh_spinners = trans.get("ui_spinners", [])
+    if zh_spinners and len(zh_spinners) == len(ENGLISH_SPINNERS):
+        en_arr = "[" + ",".join(f'"{v}"' for v in ENGLISH_SPINNERS) + "]"
+        zh_arr = "[" + ",".join(f'"{v}"' for v in zh_spinners) + "]"
+        if en_arr in content:
+            content = content.replace(en_arr, zh_arr, 1)
+            if verbose:
+                print(f"  思考動畫: {len(zh_spinners)} 個動詞已翻譯")
+            changes += 1
+
+    # 5. Completion verbs
+    for en, zh in trans.get("ui_completion", {}).items():
+        if en in content:
+            content = content.replace(en, zh)
+            if verbose:
+                print(f"  完成提示: {en} → {zh}")
+            changes += 1
+
+    # 6. Status/template strings
+    for en, zh in trans.get("ui_status", {}).items():
+        if en in content:
+            content = content.replace(en, zh)
+            if verbose:
+                print(f"  狀態: {repr(en)} → {repr(zh)}")
+            changes += 1
+
+    # 7. Tip messages
+    for en, zh in trans.get("ui_tips", {}).items():
+        if en in content:
+            content = content.replace(en, zh)
+            if verbose:
+                print(f"  提示: {en[:30]}... → {zh[:30]}...")
+            changes += 1
+
+    return content, changes
+
+
 def patch(dry_run=False):
     """Apply translations to cli.js using simple string replacement."""
     cli_js = find_cli_js()
     if not cli_js:
         print("ERROR: 找不到 Claude Code 的 cli.js")
         print("請確認已用 npm install -g @anthropic-ai/claude-code 安裝")
+        print("如果使用原生 .exe 版本，請改用: python patch.py --exe")
         sys.exit(1)
 
     version = get_version(cli_js)
@@ -80,30 +216,7 @@ def patch(dry_run=False):
     with open(cli_js, "r", encoding="utf-8") as f:
         content = f.read()
 
-    original = content
-    changes = 0
-
-    # Apply name translations
-    for en, zh in trans.get("names", {}).items():
-        if en in content and zh not in content:
-            content = content.replace(en, zh, 1)
-            cmd = en.split('"')[1]
-            zh_name = zh.split('"')[1]
-            print(f"  名稱: /{cmd} → /{zh_name}")
-            changes += 1
-
-    # Apply description translations
-    for en, zh in trans.get("descriptions", {}).items():
-        if en in content:
-            content = content.replace(en, zh)
-            print(f"  說明: {en[:30]}... → {zh[:30]}...")
-            changes += 1
-
-    # Apply alias injections
-    for en, zh in trans.get("aliases", {}).items():
-        if en in content and zh not in content:
-            content = content.replace(en, zh, 1)
-            changes += 1
+    content, changes = apply_translations(content, trans)
 
     if changes == 0:
         print("\n已經是最新狀態，無需 patch")
@@ -123,33 +236,86 @@ def patch(dry_run=False):
     with open(cli_js, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"Patch 完成!")
+    print("Patch 完成!")
 
 
-def restore():
-    """Restore from backup."""
-    cli_js = find_cli_js()
-    if not cli_js:
-        print("ERROR: 找不到 cli.js")
+def patch_exe(dry_run=False):
+    """Apply translations to native claude.exe binary."""
+    exe_path = find_exe()
+    if not exe_path:
+        print("ERROR: 找不到 Claude Code 的 claude.exe")
+        print("請確認已安裝原生版本（winget install Anthropic.ClaudeCode）")
         sys.exit(1)
 
-    backup_path = cli_js.with_suffix(".js.bak")
+    print(f"claude.exe: {exe_path} ({exe_path.stat().st_size / 1024 / 1024:.0f} MB)")
+
+    trans = load_translations()
+
+    # Read binary, decode the JS region as UTF-8
+    with open(exe_path, "rb") as f:
+        raw = f.read()
+
+    # The exe contains embedded JS as UTF-8 text
+    # We decode, apply translations, then re-encode
+    text = raw.decode("utf-8", errors="surrogateescape")
+
+    text, changes = apply_translations(text, trans)
+
+    if changes == 0:
+        print("\n已經是最新狀態，無需 patch")
+        return
+
+    print(f"\n共 {changes} 處替換")
+
+    if dry_run:
+        print("(--dry-run 模式，未修改檔案)")
+        return
+
+    # Backup
+    backup_path = exe_path.with_suffix(".exe.bak")
+    if not backup_path.exists():
+        shutil.copy2(exe_path, backup_path)
+        print(f"備份: {backup_path} ({backup_path.stat().st_size / 1024 / 1024:.0f} MB)")
+
+    with open(exe_path, "wb") as f:
+        f.write(text.encode("utf-8", errors="surrogateescape"))
+
+    print("Patch 完成!")
+    print("注意: Claude Code 更新後需要重新 patch")
+
+
+def restore(exe_mode=False):
+    """Restore from backup."""
+    if exe_mode:
+        exe_path = find_exe()
+        if not exe_path:
+            print("ERROR: 找不到 claude.exe")
+            sys.exit(1)
+        backup_path = exe_path.with_suffix(".exe.bak")
+        target = exe_path
+    else:
+        cli_js = find_cli_js()
+        if not cli_js:
+            print("ERROR: 找不到 cli.js")
+            sys.exit(1)
+        backup_path = cli_js.with_suffix(".js.bak")
+        target = cli_js
+
     if backup_path.exists():
-        shutil.copy2(backup_path, cli_js)
-        print(f"已還原: {backup_path}")
+        shutil.copy2(backup_path, target)
+        print(f"已還原: {target}")
     else:
         print("ERROR: 找不到備份")
         sys.exit(1)
 
 
 def scan():
-    """Scan for untranslated commands."""
+    """Scan for untranslated commands in cli.js."""
     cli_js = find_cli_js()
     if not cli_js:
         print("ERROR: 找不到 cli.js")
         sys.exit(1)
 
-    import re
     with open(cli_js, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -168,18 +334,26 @@ def scan():
         else:
             en_count += 1
             status = []
-            if not has_zh_name: status.append("名稱")
-            if not has_zh_desc: status.append("說明")
+            if not has_zh_name:
+                status.append("名稱")
+            if not has_zh_desc:
+                status.append("說明")
             print(f"  /{name:<30} [{','.join(status)}英文] {desc}")
 
-    print(f"\n中文: {zh_count}, 英文: {en_count}, 覆蓋率: {zh_count}/{zh_count+en_count} ({zh_count*100//(zh_count+en_count) if zh_count+en_count else 0}%)")
+    total = zh_count + en_count
+    pct = zh_count * 100 // total if total else 0
+    print(f"\n中文: {zh_count}, 英文: {en_count}, 覆蓋率: {zh_count}/{total} ({pct}%)")
 
 
 def list_translations():
     """List all translations."""
     trans = load_translations()
     names = trans.get("names", {})
-    print(f"=== 對照表 ({len(names)} 個指令) ===")
+    spinners = trans.get("ui_spinners", [])
+    completion = trans.get("ui_completion", {})
+    tips = trans.get("ui_tips", {})
+
+    print(f"=== 指令對照表 ({len(names)} 個) ===")
     print(f"{'英文':<30} {'中文'}")
     print("-" * 60)
     for en, zh in sorted(names.items()):
@@ -187,18 +361,40 @@ def list_translations():
         zh_name = zh.split('"')[1]
         print(f"/{en_name:<29} /{zh_name}")
 
+    if spinners:
+        print(f"\n=== 思考動畫 ({len(spinners)} 個) ===")
+        for i, zh in enumerate(spinners):
+            en = ENGLISH_SPINNERS[i] if i < len(ENGLISH_SPINNERS) else "?"
+            print(f"  {en:<25} → {zh}")
+
+    if completion:
+        print(f"\n=== 完成提示 ({len(completion)} 個) ===")
+        for en, zh in completion.items():
+            print(f"  {en:<20} → {zh}")
+
+    if tips:
+        print(f"\n=== 操作提示 ({len(tips)} 個) ===")
+        for en, zh in tips.items():
+            print(f"  {en[:40]}... → {zh[:40]}...")
+
 
 def main():
     args = sys.argv[1:]
+    exe_mode = "--exe" in args
 
     if "--restore" in args:
-        restore()
+        restore(exe_mode=exe_mode)
     elif "--scan" in args:
         scan()
     elif "--list" in args:
         list_translations()
     elif "--dry-run" in args:
-        patch(dry_run=True)
+        if exe_mode:
+            patch_exe(dry_run=True)
+        else:
+            patch(dry_run=True)
+    elif exe_mode:
+        patch_exe()
     else:
         patch()
 
