@@ -8,7 +8,7 @@
 
 ### 指令說明中文化
 
-（指令名稱刻意保留英文，方便查資料時對照官方教學——詳見下方說明）
+（npm 版格式：`english(中文)`；winget 版保持純英文）
 
 ```
 修改前：
@@ -16,7 +16,12 @@
 /commit    Create a git commit
 /compact   Clear conversation history but keep a summary
 
-修改後：
+修改後（npm 版）：
+/clear(清除)     清除對話紀錄，釋放上下文空間
+/commit(提交)    建立 Git 提交
+/compact(壓縮)   壓縮對話紀錄，保留摘要在上下文中
+
+修改後（winget 版）：
 /clear     清除對話紀錄，釋放上下文空間
 /commit    建立 Git 提交
 /compact   壓縮對話紀錄，保留摘要在上下文中
