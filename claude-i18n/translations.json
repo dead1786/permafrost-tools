@@ -371,8 +371,15 @@
     "Worked for ": "工作了 ",
     "Context limit reached": "上下文已滿",
     " to expand)": " 展開)",
-    " with ${EzH(q)} effort": " ${EzH(q)}精力",
-    " with ${K8.bold(W)} effort": " ${K8.bold(W)}精力"
+    " with ${EzH(q)} effort": " 精力Lv:${EzH(q)}",
+    " with ${K8.bold(W)} effort": " 精力Lv:${K8.bold(W)}",
+    "Current effort level": "目前精力等級",
+    "Effort level: auto (currently ": "精力等級：自動（目前",
+    "Failed to set effort level": "設定精力等級失敗",
+    "Quick, straightforward implementation with minimal overhead": "快速精簡，不做額外處理與深入分析",
+    "Balanced approach with standard implementation and testing": "標準模式，兼顧實作品質與測試",
+    "Comprehensive implementation with extensive testing and documentation": "完整實作，含詳盡測試與文件說明",
+    "Maximum capability with deepest reasoning (Opus 4.6 only)": "最深度推理，全力以赴（僅 Opus 4.6）"
   },
   "ui_tips": {
     "Use /clear to start fresh when switching topics and free up context": "切換話題時使用 /clear 重新開始並釋放上下文",
