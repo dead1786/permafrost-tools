@@ -1,5 +1,6 @@
 """claude-wrapper.py — Claude Code 中文化啟動器。
 檢查 claude.exe 是否需要重新 patch，自動維護中文化。
+啟動時自動檢查翻譯包新版本（每 24 小時一次，不強制更新）。
 用法：直接取代 claude 指令使用。
 """
 import hashlib
@@ -7,10 +8,15 @@ import json
 import os
 import subprocess
 import sys
+import time
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 STATE_FILE = Path.home() / ".claude-i18n-state.json"
+REMOTE_VERSION_URL = "https://raw.githubusercontent.com/dead1786/permafrost-tools/master/claude-i18n/VERSION"
+UPDATE_CHECK_INTERVAL = 86400  # 24 小時
 
 
 def get_file_hash(path):
@@ -66,6 +72,37 @@ def needs_patch(exe_path, mode):
     return current_hash != state.get("last_patched_hash")
 
 
+def check_for_updates():
+    """檢查翻譯包是否有新版本（每 24h 一次，失敗靜默跳過）。"""
+    try:
+        state = load_state()
+        last_check = state.get("last_update_check", 0)
+        if time.time() - last_check < UPDATE_CHECK_INTERVAL:
+            return
+
+        # 讀本地版本
+        local_ver_file = SCRIPT_DIR / "VERSION"
+        if not local_ver_file.exists():
+            return
+        local_ver = local_ver_file.read_text(encoding="utf-8").strip()
+
+        # 查遠端版本（3 秒超時）
+        req = urllib.request.Request(REMOTE_VERSION_URL, headers={"User-Agent": "claude-i18n"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            remote_ver = resp.read().decode("utf-8").strip()
+
+        # 記錄檢查時間（不管結果如何都更新，避免頻繁重試）
+        state["last_update_check"] = time.time()
+        save_state(state)
+
+        if remote_ver and remote_ver != local_ver:
+            print(f"[claude-i18n] 新版翻譯 v{remote_ver} 可用（目前 v{local_ver}）", file=sys.stderr)
+            print(f"[claude-i18n] 更新指令: cd {SCRIPT_DIR} && git pull && python patch.py", file=sys.stderr)
+    except Exception:
+        # 網路失敗、超時、DNS 錯誤 — 全部靜默跳過
+        pass
+
+
 def run_patch(mode):
     """執行 patch。"""
     patch_script = SCRIPT_DIR / "patch.py"
@@ -82,6 +119,9 @@ def main():
     if not exe_path:
         print("ERROR: 找不到 Claude Code")
         sys.exit(1)
+
+    # 非阻塞檢查翻譯包更新
+    check_for_updates()
 
     # Check if patch needed
     if needs_patch(exe_path, mode):

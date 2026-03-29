@@ -134,12 +134,26 @@ winget 安裝的 Claude Code 是打包好的二進位檔（`claude.exe`）。中
 
 ## 自動維護（可選）
 
-`claude-wrapper.py` 可作為 Claude Code 啟動器，偵測到版本更新時自動重新 patch：
+`claude-wrapper.py` 可作為 Claude Code 啟動器，提供兩項自動化功能：
+
+1. **Claude Code 更新時自動重新 patch** — 偵測到 exe/cli.js 檔案變更時自動重新中文化
+2. **翻譯包更新通知** — 每 24 小時檢查一次遠端是否有新版翻譯，有的話顯示提示（不強制更新）
 
 ```bash
 # 設定 alias（替代 claude 指令）
 alias claude="python /path/to/claude-wrapper.py"
 ```
+
+啟動時如果有新版翻譯可用，會看到：
+
+```
+[claude-i18n] 新版翻譯 v2.2.0 可用（目前 v2.1.86）
+[claude-i18n] 更新指令: cd /path/to/claude-i18n && git pull && python patch.py
+```
+
+- 每 24 小時最多檢查一次，不影響啟動速度
+- 網路不通時靜默跳過，不會報錯
+- 只是通知，不會自動拉取或修改任何檔案
 
 ## 為什麼指令名稱保持英文？
 

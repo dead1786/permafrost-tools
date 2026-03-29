@@ -353,6 +353,23 @@ def apply_binary_translations(exe_path, trans, dry_run=False):
         elif en.encode("utf-8") in data:
             skipped += 1
 
+    # 9. Constant pool: template literal fragments
+    # Bundler splits template literals into length-prefixed constant pool entries.
+    # These can't be matched as plain strings, so we use exact binary patterns.
+    print("\n--- Constant pool 模板片段 ---")
+    pool_replacements = [
+        # " effort" (7B) → " 精力" (7B) — equal length, no prefix change
+        (b'\x07\x00\x00\x00 effort\x00', b'\x07\x00\x00\x00 \xe7\xb2\xbe\xe5\x8a\x9b\x00'),
+    ]
+    for old_pat, new_pat in pool_replacements:
+        count = data.count(old_pat)
+        if count > 0:
+            data = data.replace(old_pat, new_pat)
+            print(f"  ' effort' \u2192 ' \u7cbe\u529b': {count} \u8655")
+            changes += 1
+        else:
+            print(f"  ' effort': 未找到")
+
     # Sanity check: size must not change
     assert len(data) == original_size, \
         f"BUG: binary size changed! {original_size} → {len(data)}"
