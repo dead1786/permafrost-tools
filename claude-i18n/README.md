@@ -1,6 +1,6 @@
 # claude-i18n‌​‍‌‍​‌​ — Claude Code 繁體中文化
 
-一鍵將 Claude Code 全面中文化：指令說明、187 個思考動畫、完成提示、操作提示，全部翻譯成繁體中文。
+一鍵將 Claude Code 全面中文化：指令說明、187 個思考動畫、完成提示、操作提示、互動按鍵提示、狀態訊息、錯誤訊息，全部翻譯成繁體中文。
 
 支援 **npm 安裝版**與 **winget 原生安裝版**（`winget install Anthropic.ClaudeCode`）。
 
@@ -49,6 +49,18 @@
 修改後：使用 /btw 快速問一個問題，不會中斷 Claude 目前的工作
 ```
 
+### 互動提示 / 狀態 / 錯誤訊息中文化
+
+```
+修改前：Press Enter to continue          修改後：按 Enter 繼續
+修改前：Esc to cancel                    修改後：Esc 取消
+修改前：Waiting for permission…           修改後：等待權限中…
+修改前：Context limit reached             修改後：上下文已滿
+修改前：Sorry, Claude Code encountered... 修改後：抱歉，Claude Code 遇到錯誤
+修改前：Do you want to proceed?           修改後：要繼續嗎？
+修改前：(ctrl+o to expand)               修改後：(ctrl+o 展開)
+```
+
 ## 安裝需求
 
 - Python 3.8+
@@ -88,9 +100,9 @@ python patch.py --list
 winget 安裝的 Claude Code 是打包好的二進位檔（`claude.exe`）。中文字元的 byte 數比英文多，若中文版字串比原始英文字串更長則無法替換（自動跳過）。
 
 因此 winget 版覆蓋率略低：
-- 指令說明：約 60~70 個可替換
-- 思考動畫：約 103/187 個可替換（較短的英文動詞沒辦法換）
-- 部分完成提示：視字串長度而定
+- 指令名稱：npm 有 `english(中文)` 格式，winget 保持純英文（byte 限制）
+- 思考動畫：187/187 全可替換（已優化翻譯長度）
+- 其他類別：約 90% 可替換
 
 如需 100% 覆蓋率，請使用 npm 版。
 
@@ -98,11 +110,13 @@ winget 安裝的 Claude Code 是打包好的二進位檔（`claude.exe`）。中
 
 | 類別 | npm 版 | winget 版 | 說明 |
 |------|--------|-----------|------|
-| 指令說明 | 68 個 | ~60 個 | winget 依字串長度判斷 |
-| 思考動畫 | 187 個 | ~103 個 | 中文 bytes 較長者跳過 |
+| 指令名稱 | 81 個 | — | winget 因 byte 限制保持英文 |
+| 指令說明 | 74 個 | ~60 個 | winget 依字串長度判斷 |
+| 思考動畫 | 187 個 | 187 個 | 已優化翻譯長度 |
 | 完成提示 | 8 個 | ~5 個 | |
-| 狀態文字 | 3 個 | ~2 個 | |
-| 操作提示 | 2 個 | ~1 個 | |
+| 狀態/模板 | 5 個 | 5 個 | effort、expand、context 等 |
+| 操作提示 | 2 個 | 2 個 | |
+| 介面字串 | 94 個 | 90 個 | 互動提示、錯誤、確認、標籤 |
 
 ## 官方更新後怎麼辦？
 
