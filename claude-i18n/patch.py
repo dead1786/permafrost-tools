@@ -1,16 +1,21 @@
 """
-Claude Code i18n Patch — 繁體中文化工具
+Claude Code i18n Patch‍‌​‍​‌ — 繁體中文化工具
 使用對照表逐一替換字串，不依賴程式碼結構，官方更新後只需更新對照表。
-僅支援 npm 安裝版（cli.js）。
+支援 npm 安裝版（cli.js）及 winget 安裝版（claude.exe binary）。
 
 Usage:
-  python patch.py                    # 自動 patch
+  python patch.py                    # 自動偵測（npm 優先，找不到就用 winget）
+  python patch.py --winget           # 強制使用 winget 版
+  python patch.py --npm              # 強制使用 npm 版
   python patch.py --dry-run          # 預覽不修改
+  python patch.py --dry-run --winget # 預覽 winget 版
   python patch.py --restore          # 還原備份
+  python patch.py --restore --winget # 還原 winget 備份
   python patch.py --scan             # 掃描未翻譯的指令
   python patch.py --list             # 列出對照表
 """
 
+import glob as globmod
 import json
 import os
 import re
@@ -88,6 +93,34 @@ def find_cli_js():
     for p in candidates:
         if p.exists():
             return p
+    return None
+
+
+def find_winget_exe():
+    """Find Claude Code's claude.exe installed via winget."""
+    local_app = Path.home() / "AppData" / "Local"
+    # WinGet packages dir — the folder name varies by source hash
+    winget_base = local_app / "Microsoft" / "WinGet" / "Packages"
+    if winget_base.exists():
+        # Match any Anthropic.ClaudeCode_* directory
+        pattern = str(winget_base / "Anthropic.ClaudeCode_*" / "claude.exe")
+        matches = globmod.glob(pattern)
+        if matches:
+            # Pick the newest if multiple versions exist
+            matches.sort(key=os.path.getmtime, reverse=True)
+            return Path(matches[0])
+
+    # Fallback: check if claude.exe is on PATH and is the winget version (>100MB)
+    try:
+        result = subprocess.run(
+            ["where", "claude.exe"], capture_output=True, text=True, timeout=10
+        )
+        for line in result.stdout.strip().splitlines():
+            p = Path(line.strip())
+            if p.exists() and p.stat().st_size > 100_000_000:  # >100MB = bundled binary
+                return p
+    except Exception:
+        pass
     return None
 
 
@@ -172,13 +205,200 @@ def apply_translations(content, trans, verbose=True):
     return content, changes
 
 
+def _binary_replace(data, old_str, new_str, verbose=True, label=""):
+    """Replace old_str with new_str in binary data, padding with spaces if new is shorter.
+    Returns (new_data, replaced) where replaced is True if substitution happened."""
+    old_bytes = old_str.encode("utf-8")
+    new_bytes = new_str.encode("utf-8")
+    old_len = len(old_bytes)
+    new_len = len(new_bytes)
+
+    if new_len > old_len:
+        if verbose:
+            print(f"  [跳過] {label}: 中文 {new_len}B > 英文 {old_len}B (超出 {new_len - old_len}B)")
+        return data, False
+
+    if old_bytes not in data:
+        return data, False
+
+    # Pad with spaces to match original byte length
+    padded = new_bytes + b" " * (old_len - new_len)
+    count = data.count(old_bytes)
+    data = data.replace(old_bytes, padded)
+    if verbose:
+        saved = old_len - new_len
+        suffix = f" ×{count}" if count > 1 else ""
+        print(f"  {label}: {old_len}B → {new_len}B (填充 {saved}B){suffix}")
+    return data, True
+
+
+def apply_binary_translations(exe_path, trans, dry_run=False):
+    """Apply translations to winget claude.exe binary via byte-level replacement.
+    Returns change count."""
+    print(f"讀取 binary: {exe_path} ({exe_path.stat().st_size / 1024 / 1024:.0f} MB)")
+
+    with open(exe_path, "rb") as f:
+        data = f.read()
+
+    original_size = len(data)
+    changes = 0
+    skipped = 0
+
+    # 1. Command name translations (binary mode: pure Chinese, no parenthetical)
+    binary_names = trans.get("binary_names", {})
+    if not binary_names:
+        binary_names = trans.get("names", {})  # fallback
+    print(f"\n--- 指令名稱 ({len(binary_names)} 個) ---")
+    for en, zh in binary_names.items():
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=en.split('"')[1] if '"' in en else en[:20])
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # 2. Description translations
+    print("\n--- 指令說明 ---")
+    for en, zh in trans.get("descriptions", {}).items():
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=en[:30].strip('"'))
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # 3. Alias injections
+    print("\n--- 別名注入 ---")
+    for en, zh in trans.get("aliases", {}).items():
+        zh_bytes = zh.encode("utf-8")
+        if zh_bytes in data:
+            print(f"  [已存在] {en[:30]}")
+            continue
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=en[:30])
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # 4. Thinking spinner verbs — individually replace each verb
+    zh_spinners = trans.get("ui_spinners", [])
+    if zh_spinners and len(zh_spinners) == len(ENGLISH_SPINNERS):
+        print(f"\n--- 思考動畫 ({len(ENGLISH_SPINNERS)} 個動詞) ---")
+        spinner_ok = 0
+        spinner_skip = 0
+        for i, en_verb in enumerate(ENGLISH_SPINNERS):
+            zh_verb = zh_spinners[i]
+            # In the binary, spinner verbs appear as "Verb" in a JSON array
+            en_str = f'"{en_verb}"'
+            zh_str = f'"{zh_verb}"'
+            data, ok = _binary_replace(data, en_str, zh_str, verbose=False)
+            if ok:
+                spinner_ok += 1
+            else:
+                en_b = en_str.encode("utf-8")
+                zh_b = zh_str.encode("utf-8")
+                if en_b in data and len(zh_b) > len(en_b):
+                    spinner_skip += 1
+        print(f"  替換: {spinner_ok}, 跳過(太長): {spinner_skip}, "
+              f"未找到: {len(ENGLISH_SPINNERS) - spinner_ok - spinner_skip}")
+        if spinner_ok:
+            changes += 1
+
+    # 5. Completion verbs
+    print("\n--- 完成提示 ---")
+    for en, zh in trans.get("ui_completion", {}).items():
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=en.strip('"'))
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # 6. Status/template strings
+    print("\n--- 狀態字串 ---")
+    for en, zh in trans.get("ui_status", {}).items():
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=repr(en)[:30])
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # 7. Tip messages
+    print("\n--- 操作提示 ---")
+    for en, zh in trans.get("ui_tips", {}).items():
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=en[:30])
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # Sanity check: size must not change
+    assert len(data) == original_size, \
+        f"BUG: binary size changed! {original_size} → {len(data)}"
+
+    print(f"\n共 {changes} 類替換, {skipped} 處因長度超出而跳過")
+
+    if changes == 0:
+        print("已經是最新狀態或無可替換項目")
+        return changes
+
+    if dry_run:
+        print("(--dry-run 模式，未修改檔案)")
+        return changes
+
+    # Backup
+    backup_path = exe_path.with_suffix(".exe.bak")
+    if not backup_path.exists():
+        print(f"備份: {backup_path}")
+        shutil.copy2(exe_path, backup_path)
+    else:
+        print(f"備份已存在: {backup_path}")
+
+    with open(exe_path, "wb") as f:
+        f.write(data)
+
+    print(f"Binary Patch 完成! ({exe_path})")
+    return changes
+
+
+def patch_winget(dry_run=False):
+    """Apply translations to winget claude.exe binary."""
+    exe = find_winget_exe()
+    if not exe:
+        print("ERROR: 找不到 winget 版的 claude.exe")
+        print("預期路徑: %LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\Anthropic.ClaudeCode_*\\claude.exe")
+        sys.exit(1)
+
+    print(f"claude.exe: {exe}")
+    trans = load_translations()
+    apply_binary_translations(exe, trans, dry_run=dry_run)
+
+
+def restore_winget():
+    """Restore winget claude.exe from backup."""
+    exe = find_winget_exe()
+    if not exe:
+        print("ERROR: 找不到 winget 版的 claude.exe")
+        sys.exit(1)
+    backup_path = exe.with_suffix(".exe.bak")
+    if backup_path.exists():
+        shutil.copy2(backup_path, exe)
+        print(f"已還原: {exe}")
+    else:
+        print("ERROR: 找不到備份 (.exe.bak)")
+        sys.exit(1)
+
+
 def patch(dry_run=False):
     """Apply translations to cli.js using simple string replacement."""
     cli_js = find_cli_js()
     if not cli_js:
-        print("ERROR: 找不到 Claude Code 的 cli.js")
+        print("ERROR: 找不到 Claude Code 的 cli.js (npm 版)")
         print("請確認已用 npm install -g @anthropic-ai/claude-code 安裝")
-        print("注意：僅支援 npm 版，不支援原生 .exe 版（winget）")
+        print("提示：如果是 winget 安裝，請使用 --winget 參數")
         sys.exit(1)
 
     version = get_version(cli_js)
@@ -299,19 +519,50 @@ def list_translations():
             print(f"  {en[:40]}... → {zh[:40]}...")
 
 
+def auto_detect_mode():
+    """Auto-detect: prefer npm, fall back to winget."""
+    if find_cli_js():
+        return "npm"
+    if find_winget_exe():
+        return "winget"
+    return None
+
+
 def main():
     args = sys.argv[1:]
+    force_winget = "--winget" in args
+    force_npm = "--npm" in args
+    dry_run = "--dry-run" in args
 
     if "--restore" in args:
-        restore()
+        if force_winget:
+            restore_winget()
+        else:
+            restore()
     elif "--scan" in args:
         scan()
     elif "--list" in args:
         list_translations()
-    elif "--dry-run" in args:
-        patch(dry_run=True)
     else:
-        patch()
+        # Determine target
+        if force_winget:
+            mode = "winget"
+        elif force_npm:
+            mode = "npm"
+        else:
+            mode = auto_detect_mode()
+
+        if mode == "winget":
+            print("[模式: winget binary]")
+            patch_winget(dry_run=dry_run)
+        elif mode == "npm":
+            print("[模式: npm cli.js]")
+            patch(dry_run=dry_run)
+        else:
+            print("ERROR: 找不到 Claude Code 安裝")
+            print("  npm 版: npm install -g @anthropic-ai/claude-code")
+            print("  winget 版: winget install Anthropic.ClaudeCode")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
