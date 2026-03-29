@@ -253,9 +253,11 @@ def apply_binary_translations(exe_path, trans, dry_run=False):
     skipped = 0
 
     # 1. Command name translations (binary mode: pure Chinese, no parenthetical)
-    binary_names = trans.get("binary_names", {})
-    if not binary_names:
-        binary_names = trans.get("names", {})  # fallback
+    # If binary_names key exists (even empty), respect it — don't fallback to npm names
+    if "binary_names" in trans:
+        binary_names = trans["binary_names"]
+    else:
+        binary_names = trans.get("names", {})
     print(f"\n--- 指令名稱 ({len(binary_names)} 個) ---")
     for en, zh in binary_names.items():
         data, ok = _binary_replace(data, en, zh, verbose=True,
