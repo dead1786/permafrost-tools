@@ -375,5 +375,15 @@
   "ui_tips": {
     "Use /clear to start fresh when switching topics and free up context": "切換話題時使用 /clear 重新開始並釋放上下文",
     "Use /btw to ask a quick side question without interrupting Claude's current work": "使用 /btw 快速問一個問題，不會中斷 Claude 目前的工作"
+  },
+  "ui_misc": {
+    "\"What would you like to do?\"": "\"你想做什麼？\"",
+    "\"Welcome to Claude Code\"": "\"歡迎 Claude Code\"",
+    "Available commands:": "可用指令：",
+    "\"Reading file\"": "\"讀取檔案\"",
+    "\"Writing file\"": "\"寫入檔案\"",
+    "\"Running command\"": "\"執行指令中\"",
+    "\"Auto mode\"": "\"自動\"",
+    "\"Fast mode\"": "\"快速\""
   }
 }

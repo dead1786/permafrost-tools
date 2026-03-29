@@ -202,6 +202,14 @@ def apply_translations(content, trans, verbose=True):
                 print(f"  提示: {en[:30]}... → {zh[:30]}...")
             changes += 1
 
+    # 8. Misc UI strings
+    for en, zh in trans.get("ui_misc", {}).items():
+        if en in content:
+            content = content.replace(en, zh)
+            if verbose:
+                print(f"  介面: {en[:30]} → {zh[:30]}")
+            changes += 1
+
     return content, changes
 
 
@@ -328,6 +336,16 @@ def apply_binary_translations(exe_path, trans, dry_run=False):
     # 7. Tip messages
     print("\n--- 操作提示 ---")
     for en, zh in trans.get("ui_tips", {}).items():
+        data, ok = _binary_replace(data, en, zh, verbose=True,
+                                   label=en[:30])
+        if ok:
+            changes += 1
+        elif en.encode("utf-8") in data:
+            skipped += 1
+
+    # 8. Misc UI strings
+    print("\n--- 介面字串 ---")
+    for en, zh in trans.get("ui_misc", {}).items():
         data, ok = _binary_replace(data, en, zh, verbose=True,
                                    label=en[:30])
         if ok:
