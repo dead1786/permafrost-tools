@@ -1,8 +1,9 @@
 """
-self-guard.py — AI behavior guard hook for Claude Code (PreResponse)
+self-guard.py — AI behavior guard hook for Claude Code (Stop)
 
-Scans the assistant's pending response for known bad patterns and injects
-a warning system message so the model can self-correct before the user sees it.
+Scans the assistant's final response for known bad patterns and blocks
+Claude from stopping, forcing self-correction via the Stop hook's
+decision/reason mechanism.
 
 Detection modes (all configurable via self-guard-config.json):
   E: Sycophancy — immediately agrees when challenged, no analysis
@@ -10,9 +11,14 @@ Detection modes (all configurable via self-guard-config.json):
   G: Acknowledge without action — says "got it" but uses no tools
   Passive wait: defers with "later"/"tomorrow" without concrete tracking
 
-Output: {"systemMessage": "..."} on detection, {} otherwise.
-Hook type: PreResponse (exit 0 always)
+Output: {"decision":"block","reason":"..."} on detection, {} otherwise.
+Hook type: Stop (exit 0 always)
 Dependencies: Python 3.8+ stdlib only
+
+Input fields from Stop hook:
+  - stop_hook_active: bool — True if already re-running after a stop hook block
+  - last_assistant_message: str — The assistant's final response text
+  - transcript_path: str — Path to conversation transcript
 """
 import json
 import os
@@ -252,28 +258,30 @@ def main():
 
     input_data = read_stdin()
 
+    # Prevent infinite loops: if stop_hook_active is True, Claude is already
+    # re-running after a previous stop hook block — don't block again.
+    if input_data.get("stop_hook_active", False):
+        print("{}")
+        sys.exit(0)
+
+    # The Stop hook provides last_assistant_message directly
+    assistant_text = input_data.get("last_assistant_message", "")
+
+    # Also load transcript for multi-turn analysis (modes E, G)
     transcript_path = input_data.get("transcript_path", "")
     messages = []
     if transcript_path:
         messages = load_transcript_tail(transcript_path, n=8)
     if not messages:
         messages = input_data.get("messages", [])
-    if not messages:
-        print("{}")
-        sys.exit(0)
 
-    # Find the latest assistant message
-    last_assistant = None
-    for msg in reversed(messages):
-        if msg.get("role") == "assistant":
-            last_assistant = msg
-            break
+    # If we have no assistant text from either source, nothing to check
+    if not assistant_text.strip() and messages:
+        for msg in reversed(messages):
+            if msg.get("role") == "assistant":
+                assistant_text = extract_text(msg)
+                break
 
-    if not last_assistant:
-        print("{}")
-        sys.exit(0)
-
-    assistant_text = extract_text(last_assistant)
     if not assistant_text.strip():
         print("{}")
         sys.exit(0)
@@ -321,17 +329,19 @@ def main():
         print("{}")
         sys.exit(0)
 
-    # Build warning message
+    # Build warning message and block Claude from stopping,
+    # forcing it to self-correct before the user sees the response.
     severity = "WARNING" if len(warnings) == 1 else "CRITICAL"
-    header = f"[SELF-GUARD {severity}] Detected {len(warnings)} behavior pattern(s):\n"
-    body = "\n".join(f"\n{i}. {w}" for i, w in enumerate(warnings, 1))
+    header = f"[SELF-GUARD {severity}] Detected {len(warnings)} behavior pattern(s):"
+    body = "\n".join(f"{i}. {w}" for i, w in enumerate(warnings, 1))
 
     if len(warnings) >= 2:
-        footer = "\n\nMultiple patterns triggered. Correct all of them before responding."
+        footer = "Multiple patterns triggered. Correct all of them before responding."
     else:
-        footer = "\n\nReview your response and correct the issue."
+        footer = "Review your response and correct the issue."
 
-    result = {"systemMessage": header + body + footer}
+    reason = f"{header}\n{body}\n{footer}"
+    result = {"decision": "block", "reason": reason}
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(0)
 

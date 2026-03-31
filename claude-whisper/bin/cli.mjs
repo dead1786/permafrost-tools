@@ -29,6 +29,7 @@ function showHelp() {
   log(`  ${CYAN}claude-whisper clear${RESET}             Remove all whispers`);
   log(`  ${CYAN}claude-whisper uninstall${RESET}         Remove the hook from Claude Code`);
   log(`  ${CYAN}claude-whisper status${RESET}            Check installation status`);
+  log(`  ${CYAN}claude-whisper version${RESET}           Show version`);
   log();
   log(`${BOLD}Shorthand:${RESET} ${DIM}You can also use${RESET} ${CYAN}cw${RESET} ${DIM}instead of${RESET} ${CYAN}claude-whisper${RESET}`);
   log();
@@ -154,6 +155,13 @@ switch (command) {
     log(`  Hook: ${installed ? `${GREEN}installed${RESET}` : `${RED}not installed${RESET}`}`);
     log(`  Whispers: ${whispers.length} total, ${active} active`);
     log();
+    break;
+  }
+
+  case 'version':
+  case '--version':
+  case '-v': {
+    log(`claude-whisper v${VERSION}`);
     break;
   }
 

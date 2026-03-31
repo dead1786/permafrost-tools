@@ -128,10 +128,11 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "PreResponse": [
+    "Stop": [
       {
         "type": "command",
-        "command": "python ~/.claude/hooks/self-guard.py"
+        "command": "python ~/.claude/hooks/self-guard.py",
+        "timeout": 5
       }
     ]
   }
