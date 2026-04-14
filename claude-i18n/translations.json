@@ -1,5 +1,5 @@
 {
-  "_version": "2.1.91",
+  "_version": "2.1.101",
   "_description": "Claude Code 繁體中文翻譯對照表。key=原文, value=譯文。逐一字串替換, 不依賴程式碼結構。",
   "_usage": "新增翻譯: 加一組 key-value。官方更新後: 跑 scan 找新英文字串, 加進來。",
   "_origin": "kai._.97",
@@ -85,7 +85,10 @@
     "name:\"ship-audit\"": "name:\"ship-audit(上線審查)\"",
     "name:\"migration-review\"": "name:\"migration-review(遷移審查)\"",
     "name:\"pr-comments\"": "name:\"pr-comments(PR評論)\"",
-    "name:\"statusline\"": "name:\"statusline(狀態列)\""
+    "name:\"statusline\"": "name:\"statusline(狀態列)\"",
+    "name:\"autofix-pr\"": "name:\"autofix-pr(自動修PR)\"",
+    "name:\"team-onboarding\"": "name:\"team-onboarding(團隊引導)\"",
+    "name:\"toggle-memory\"": "name:\"toggle-memory(切換記憶)\""
   },
   "_binary_note": "winget binary 模式：指令名稱同樣保持英文",
   "binary_names": {},
@@ -169,7 +172,9 @@
     "\"Configure the auto-compact window size\"": "\"設定自動壓縮的視窗大小\"",
     "\"Toggle automemory off/on for this session\"": "\"切換本次工作階段的自動記憶\"",
     "\"Discover Claude Code features through quick interactive lessons\"": "\"透過互動課程探索 Claude Code 功能\"",
-    "\"Hatch a coding companion · pet, off\"": "\"孵化一隻程式夥伴 · pet, off\""
+    "\"Hatch a coding companion · pet, off\"": "\"孵化一隻程式夥伴 · pet, off\"",
+    "\"Spawn a remote Claude Code session that monitors and autofixes the current PR\"": "\"啟動遠端 Claude Code 自動監控並修復目前 PR\"",
+    "\"Help teammates ramp on Claude Code with a guide from your usage\"": "\"根據使用紀錄協助團隊成員上手 Claude Code\""
   },
   "_ui_note": "以下為 UI 介面字串翻譯（思考動畫、完成提示、操作提示等）",
   "ui_spinners": [
