@@ -1,6 +1,6 @@
 {
   "$schema": "self-guard-config-schema.json",
-  "_comment": "Configuration for self-guard.py PreResponse hook. Add/remove patterns to customize detection. Patterns are Python regex strings. Set a mode to null or empty array to disable it.",
+  "_comment": "Configuration for self-guard.py Stop hook. Add/remove patterns to customize detection. Patterns are Python regex strings. Set a mode to null or empty array to disable it.",
 
   "enabled": true,
 
