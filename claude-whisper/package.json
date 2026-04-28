@@ -17,11 +17,16 @@
     "dynamic-instructions",
     "anthropic"
   ],
-  "author": "",
+  "author": "dead1786",
   "license": "MIT",
+  "homepage": "https://github.com/dead1786/permafrost-tools/tree/master/claude-whisper",
+  "bugs": {
+    "url": "https://github.com/dead1786/permafrost-tools/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dead1786/permafrost-tools"
+    "url": "https://github.com/dead1786/permafrost-tools",
+    "directory": "claude-whisper"
   },
   "engines": {
     "node": ">=18.0.0"
