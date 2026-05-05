@@ -52,17 +52,38 @@ def read_stdin():
 
 
 def load_transcript_tail(transcript_path, n=8):
-    """Read the last n messages from the transcript file."""
+    """Read the last n messages from the transcript file.
+
+    Supports both JSON array/object format and JSONL format
+    (Claude Code uses JSONL: one JSON object per line).
+    """
     if not transcript_path or not os.path.exists(transcript_path):
         return []
     try:
         with open(transcript_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return data[-n:]
-        if isinstance(data, dict) and "messages" in data:
-            return data["messages"][-n:]
-        return []
+            raw = f.read()
+        # Try single-JSON first (array or {"messages": [...]})
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                return data[-n:]
+            if isinstance(data, dict) and "messages" in data:
+                return data["messages"][-n:]
+        except json.JSONDecodeError:
+            pass
+        # Fall back to JSONL: one JSON object per line
+        messages = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if isinstance(obj, dict) and "role" in obj:
+                    messages.append(obj)
+            except json.JSONDecodeError:
+                continue
+        return messages[-n:]
     except Exception:
         return []
 
