@@ -1,12 +1,33 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.env
 *.egg-info/
 dist/
 build/
+.venv/
+venv/
+
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.local
+
+# Tool data (local state, not repo content)
+*.bak

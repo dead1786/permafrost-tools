@@ -1,0 +1,35 @@
+name: Feature Request
+description: Suggest an improvement or new feature
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool? (or "New tool")
+      options:
+        - claude-whisper
+        - claude-i18n
+        - self-guard
+        - memory-gc
+        - pitfall-tracker
+        - frost-scheduler
+        - frost-collab
+        - New tool idea
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the problem or limitation you're facing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you solve it? Code examples welcome.
+    validations:
+      required: true

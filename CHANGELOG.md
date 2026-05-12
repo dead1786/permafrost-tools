@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **claude-whisper**: Add trailing newline to hook stdout so whispers are cleanly separated from user prompt on injection
+- **claude-i18n**: Bump verified version to 2.1.114 — translations confirmed working on current release
 
 ## [0.3.1] - 2026-04-08
 

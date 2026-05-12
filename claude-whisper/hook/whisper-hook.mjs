@@ -25,4 +25,4 @@ const active = whispers.filter(w => w.active !== false);
 if (active.length === 0) process.exit(0);
 
 const lines = active.map(w => w.text);
-process.stdout.write(lines.join('\n'));
+process.stdout.write(lines.join('\n') + '\n');

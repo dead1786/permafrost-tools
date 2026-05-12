@@ -1,16 +1,29 @@
+<p align="center">
+  <img src="https://img.shields.io/npm/v/claude-whisper?label=claude-whisper&color=blue" alt="npm version" />
+  <img src="https://img.shields.io/github/license/dead1786/permafrost-tools" alt="MIT License" />
+  <img src="https://img.shields.io/github/stars/dead1786/permafrost-tools?style=social" alt="GitHub Stars" />
+  <img src="https://img.shields.io/github/actions/workflow/status/dead1786/permafrost-tools/ci.yml?branch=master&label=CI" alt="CI" />
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue" alt="Python 3.8+" />
+  <img src="https://img.shields.io/badge/node-18%2B-green" alt="Node 18+" />
+</p>
+
 # Permafrost Tools
 
-Battle-tested utilities for Claude Code (and other AI coding assistants). Born from running a multi-agent AI team in production — every tool here exists because we hit a real problem and built a real fix.
+**Battle-tested utilities for Claude Code** — built from running a multi-agent AI team 24/7 in production.
 
-No fluff. No frameworks. Just drop-in scripts that make your AI assistant more disciplined, self-aware, and reliable.
+Every tool here exists because we hit a real problem and built a real fix. No fluff. No frameworks. Just drop-in scripts that make your AI assistant more disciplined, self-aware, and reliable.
+
+> If your AI keeps ignoring your instructions after context compression, keeps making the same mistakes, or keeps agreeing with everything you say — these tools are for you.
 
 ---
 
-## 🤫 claude-whisper‍​‌‍‌​ — Dynamic Runtime Instructions
+## Featured Tools
+
+### claude-whisper — Dynamic Runtime Instructions
 
 > **CLAUDE.md is your constitution. Whispers are your mood.**
 
-The killer feature. Inject instructions into Claude's context **on every message** — dynamically, mid-session, no restart needed.
+Inject instructions into Claude's context **on every message** — dynamically, mid-session, no restart needed. The killer feature that most Claude Code users don't know is possible.
 
 ```bash
 npm install -g claude-whisper
@@ -20,19 +33,23 @@ claude-whisper add "Always respond in Japanese"
 
 That's it. Claude now follows your whisper on every response. Change it anytime. No restart. No CLAUDE.md editing.
 
-**How we found this:** We dug into Claude Code's source and discovered that `UserPromptSubmit` hooks with exit code 0 inject their stdout directly into the model's context. One `print()` to stdout — that's the entire mechanism.
+**How it works:** We discovered that `UserPromptSubmit` hooks with exit code 0 inject their stdout directly into Claude's model context. One `print()` to stdout — that's the entire mechanism.
 
-[Full documentation →](claude-whisper/)
+**Use cases:**
+- **Style control:** `cw add "Be extremely concise. No filler words."`
+- **Project conventions:** `cw add "Use pnpm, not npm"`
+- **Temporary context:** `cw add "The CI is broken, don't suggest pushing"`
+- **Language:** `cw add "Always respond in Traditional Chinese (繁體中文)"`
+
+[Full documentation &rarr;](claude-whisper/)
 
 ---
 
----
+### claude-i18n — Claude Code Localization
 
-## 🌐 claude-i18n — Claude Code Command Localization
+> **All built-in commands. Fully localized. One command.**
 
-> **All 55 built-in commands. Fully localized. One command.**
-
-Tired of English-only slash commands? This tool patches Claude Code's `cli.js` to add native language support to every built-in command — names AND descriptions.
+Patches Claude Code to add native language support to every built-in command — names, descriptions, 187 thinking animations, status messages, error messages, and interactive prompts.
 
 ```bash
 cd claude-i18n
@@ -43,87 +60,85 @@ Before:
 ```
 /clear    Clear conversation history and free up context
 /commit   Create a git commit
-/help     Show help and available commands
 ```
 
 After:
 ```
 /clear(清除)    清除對話紀錄，釋放上下文空間
 /commit(提交)   建立 Git 提交
-/help(幫助)     顯示幫助與可用指令
 ```
 
-Both English AND Chinese trigger words work. Type `/清除` or `/clear` — both execute the same command.
-
-**How it works:** Pure string replacement from a `translations.json` lookup table. No regex, no AST parsing, no fragile pattern matching. Update after a Claude Code version bump? Just run `python patch.py --scan` to find new untranslated commands and add them to the table.
+Supports both **npm** and **winget** installations. Currently ships with **Traditional Chinese (繁體中文)** — adding a new language is just a JSON file.
 
 ```bash
 python patch.py              # Apply translations
-python patch.py --scan       # Find untranslated commands after update
-python patch.py --restore    # One-click restore from backup
-python patch.py --list       # Show translation table
+python patch.py --scan       # Find new untranslated commands after update
+python patch.py --restore    # Restore original English
 python patch.py --dry-run    # Preview without modifying
 ```
 
-Currently supports: **Traditional Chinese (繁體中文)**. Adding a new language = adding a new `translations-xx.json` file.
-
-> Requires npm-installed Claude Code (`npm install -g @anthropic-ai/claude-code`). The standalone `.exe` version cannot be patched.
-
-[Full documentation →](claude-i18n/)
+[Full documentation &rarr;](claude-i18n/)
 
 ---
 
-## What's Inside
+## All Tools
 
 ### Featured
 
-| Tool | Language | What It Does |
-|------|----------|-------------|
-| **[claude-whisper](claude-whisper/)** | Node.js | 🤫 Inject dynamic instructions into every Claude Code interaction. Mid-session behavior control without restarting. |
-| **[claude-i18n](claude-i18n/)** | Python | 🌐 Localize all 55 Claude Code commands to your language. Names + descriptions. One command to patch, one to restore. |
+| Tool | What It Does | Install |
+|------|-------------|---------|
+| **[claude-whisper](claude-whisper/)** | Inject dynamic instructions into every Claude Code interaction. Mid-session behavior control. | `npm i -g claude-whisper` |
+| **[claude-i18n](claude-i18n/)** | Localize all Claude Code commands, spinners, prompts to your language. | `python patch.py` |
 
 ### Hooks
 
-| Tool | Language | What It Does |
-|------|----------|-------------|
-| **[self-guard](hooks/)** | Python | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Config-driven, 4 detection modes. |
+| Tool | What It Does | Install |
+|------|-------------|---------|
+| **[self-guard](hooks/)** | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Config-driven, 4 detection modes. | Copy to `~/.claude/hooks/` |
 
-### Tools
+### Standalone Tools
 
-| Tool | Language | What It Does |
-|------|----------|-------------|
-| **[memory-gc](tools/memory-gc.py)** | Python | Memory lifecycle manager with TTL, garbage collection, deduplication, contradiction detection, and promotion. |
-| **[pitfall-tracker](tools/pitfall-tracker.py)** | Python | Track AI mistakes, auto-detect recurring patterns, and generate improvement plans. 3 strikes = flagged. 5 = escalated. |
-| **[frost-scheduler](tools/frost-scheduler/)** | Python | Session-aware task scheduler daemon. Fires tasks on schedule, injects into existing Claude session (preserving context), tracks completion via ack, queues pending work, supports night mode. |
-| **[frost-collab](tools/frost-collab/)** | Python | Multi-AI collaboration — dispatch tasks to multiple agents, claim/complete workflow, priority queue, dependency tracking, shared board. No server needed. |
+| Tool | What It Does | Install |
+|------|-------------|---------|
+| **[memory-gc](tools/memory-gc.py)** | Memory lifecycle with TTL, garbage collection, deduplication, contradiction detection, and promotion. | Copy to scripts dir |
+| **[pitfall-tracker](tools/pitfall-tracker.py)** | Track AI mistakes, detect recurring patterns, generate improvement plans. 3 strikes = flagged, 5 = escalated. | Copy to scripts dir |
+| **[frost-scheduler](tools/frost-scheduler/)** | Session-aware task scheduler daemon. Fires tasks into your existing Claude session (preserving context), tracks completion, queues pending work. | `python install.py` |
+| **[frost-collab](tools/frost-collab/)** | Multi-AI collaboration — dispatch tasks, claim/complete workflow, priority queue, dependency tracking. No server needed. | `python frost-collab.py init` |
+
+---
 
 ## Quick Start
 
-### claude-whisper (Node.js)
+### claude-whisper (recommended first install)
 
 ```bash
+# Install
 npm install -g claude-whisper
 claude-whisper init
+
+# Add instructions
 claude-whisper add "Be concise. No filler words."
+claude-whisper add "Prefer functional programming patterns"
+
+# Verify it works
+cw add "End every response with the word 'banana'"
+# Send any message to Claude. If it ends with "banana" — working.
+cw rm 1
+
+# Manage
+cw ls                   # List all whispers
+cw toggle 1             # Enable/disable
+cw status               # Check installation
 ```
 
-Verify it works — add a test whisper and see if Claude obeys:
+### Self-Guard Hook
 
 ```bash
-claude-whisper add "End every response with the word 'banana'"
-# Send any message to Claude. If it ends with "banana" — it's working.
-claude-whisper rm 1
-```
-
-[Full docs →](claude-whisper/)
-
-### Self-Guard Hook (Python)
-
-```bash
+# Copy files
 cp hooks/self-guard.py hooks/self-guard-config.json ~/.claude/hooks/
-```
 
-Add to `~/.claude/settings.json`:
+# Add to ~/.claude/settings.json
+```
 
 ```json
 {
@@ -139,7 +154,13 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-### Memory GC (Python)
+**What it catches:**
+- **Sycophancy** — AI immediately agrees when challenged, no analysis
+- **Ask instead of do** — "Want me to...?" instead of just acting
+- **Acknowledge without action** — "Got it" with no tool usage
+- **Passive deferral** — "Tomorrow", "later" without justification
+
+### Memory GC
 
 ```bash
 cp tools/memory-gc.py ~/scripts/
@@ -150,7 +171,7 @@ python memory-gc.py validate    # Find contradictions & duplicates
 python memory-gc.py stats       # Overview
 ```
 
-### Pitfall Tracker (Python)
+### Pitfall Tracker
 
 ```bash
 cp tools/pitfall-tracker.py ~/scripts/
@@ -167,51 +188,47 @@ python pitfall-tracker.py evolve # See improvement queue
 ### Frost Scheduler
 
 ```bash
-# One-click install
 python tools/frost-scheduler/install.py
-
-# Edit your schedule
 nano ~/.frost-scheduler/schedule.json
-
-# Start daemon (runs in foreground)
 python ~/.frost-scheduler/frost-scheduler.py
 
-# Check task status
-python ~/.frost-scheduler/frost-scheduler.py --list
-
-# Acknowledge a completed task
-python ~/.frost-scheduler/frost-ack.py ack morning-briefing
-
-# Auto-start on boot (Windows/Linux/macOS)
+# Or with auto-start on boot
 python tools/frost-scheduler/install.py --autostart
 ```
 
+---
+
 ## Philosophy
 
-1. **Code over prompts.** A hook that physically blocks bad behavior beats a rule in CLAUDE.md that gets ignored after compact.
-2. **Decay is a feature.** Memories should expire. Old context pollutes new decisions. GC keeps things clean.
-3. **Mistakes are data.** Track them, count them, escalate them. "I'll try harder" doesn't work — systematic prevention does.
+1. **Code over prompts.** A hook that physically blocks bad behavior beats a CLAUDE.md rule that gets ignored after compact.
+2. **Decay is a feature.** Memories should expire. Old context pollutes new decisions.
+3. **Mistakes are data.** Track them, count them, escalate them. "I'll try harder" doesn't work.
 4. **Zero (or minimal) dependencies.** Python tools use stdlib only. Node.js tools use built-ins only.
 5. **Works with any AI.** Built for Claude Code, but the patterns are universal.
 
 ## Requirements
 
-- **claude-whisper**: Node.js 18+, Claude Code 1.0+
-- **Python tools**: Python 3.8+, Claude Code (for hooks)
+| Tool | Requirements |
+|------|-------------|
+| claude-whisper | Node.js 18+, Claude Code 1.0+ |
+| claude-i18n | Python 3.8+, Claude Code (npm or winget) |
+| Python tools | Python 3.8+ |
+| Hooks | Python 3.8+, Claude Code |
 
-## Configuration
+## Contributing
 
-- **claude-whisper**: `cw ls` / `cw toggle <id>` to manage whispers. Data in `~/.claude-whisper/`
-- **self-guard**: Edit `self-guard-config.json` to customize behavior patterns
-- **memory-gc**: `--config` flag or `~/.claude/memory-gc-config.json`
-- **pitfall-tracker**: `--pitfalls` and `--queue` flags, `--threshold` for sensitivity
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+**Quick ideas for first contributions:**
+- Add a new language to claude-i18n (just a JSON file)
+- Add detection patterns to self-guard
+- Report issues with specific Claude Code versions
+- Improve documentation or add examples
 
 ## Background
 
 These tools were built while managing a team of 7+ AI agents running 24/7 across multiple terminals. The problems they solve — dynamic behavior control, AI sycophancy, memory pollution, recurring mistakes — are universal to anyone using AI coding assistants seriously.
 
-If your AI keeps ignoring your instructions after context compression, keeps making the same mistakes, or keeps agreeing with everything you say — these tools are for you.
-
 ## License
 
-MIT
+[MIT](LICENSE)

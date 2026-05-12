@@ -1,0 +1,73 @@
+name: Bug Report
+description: Report a bug in one of the permafrost tools
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool?
+      options:
+        - claude-whisper
+        - claude-i18n
+        - self-guard
+        - memory-gc
+        - pitfall-tracker
+        - frost-scheduler
+        - frost-collab
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Claude Code version
+      description: "Run `claude --version` to check"
+      placeholder: "e.g., 1.0.16"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Claude Code install method
+      options:
+        - npm
+        - winget
+        - standalone binary
+        - N/A
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug. Include steps to reproduce if possible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      description: Paste any relevant error messages or logs.
+      render: shell
