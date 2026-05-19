@@ -21,7 +21,11 @@ try {
   process.exit(0);
 }
 
-const active = whispers.filter(w => w.active !== false);
+const now = new Date();
+const active = whispers.filter(w =>
+  w.active !== false &&
+  (!w.expires || new Date(w.expires) > now)
+);
 if (active.length === 0) process.exit(0);
 
 const lines = active.map(w => w.text);

@@ -64,13 +64,16 @@ cw rm 1
 ```bash
 # Shorthand: use 'cw' instead of 'claude-whisper'
 
-cw add "Your instruction here"    # Add a whisper
-cw ls                             # List all whispers
-cw toggle 1                       # Enable/disable a whisper
-cw rm 1                           # Remove a whisper
-cw clear                          # Remove all whispers
-cw status                         # Check installation status
-cw uninstall                      # Remove the hook
+cw add "Your instruction here"           # Add a permanent whisper
+cw add --ttl 2 "Use bullet points"       # Add a whisper that expires in 2 hours
+cw add --ttl 24 "Focus on performance"   # Add a whisper that expires in 24 hours
+cw ls                                    # List all whispers
+cw toggle 1                              # Enable/disable a whisper
+cw rm 1                                  # Remove a whisper
+cw purge                                 # Remove all expired whispers
+cw clear                                 # Remove all whispers
+cw status                                # Check installation status
+cw uninstall                             # Remove the hook
 ```
 
 ### Example Output
@@ -78,11 +81,14 @@ cw uninstall                      # Remove the hook
 ```
 $ cw ls
 
-Whispers (2 active)
+Whispers (2 active, 1 expired)
 
   #1 [ON ] Always respond in Japanese
-  #2 [ON ] Prefer functional programming patterns
+  #2 [ON ] Use bullet points [expires in 1h 23m]
   #3 [OFF] When writing tests, use vitest not jest
+  #4 [ON ] Focus on performance [expired]
+
+Run claude-whisper purge to remove expired whispers.
 ```
 
 ## How It Works
@@ -127,6 +133,10 @@ cw add "I'm working on the auth module today - prioritize security"
 cw add "The CI is broken, don't suggest pushing until I say it's fixed"
 # Later:
 cw clear
+
+# Or use TTL — whispers expire automatically, no cleanup needed
+cw add --ttl 4 "I'm in a code review, be extra thorough"
+cw add --ttl 8 "Focus only on the payments module"
 ```
 
 **Language**
@@ -138,6 +148,9 @@ cw add "Always respond in Traditional Chinese (繁體中文)"
 
 **Does this work mid-session?**
 Yes! That's the whole point. Whispers are read fresh on every message. Add, remove, or toggle them anytime.
+
+**How does TTL work?**
+Add `--ttl <hours>` when creating a whisper: `cw add --ttl 2 "Be concise"`. The whisper will be ignored by the hook once it expires — automatically, without any action from you. Run `cw purge` to clean them from the list, or `cw ls` to see which ones have expired.
 
 **Does this affect performance?**
 The hook runs in <50ms. It reads a JSON file and prints text. You won't notice it.

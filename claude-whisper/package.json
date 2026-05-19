@@ -1,6 +1,6 @@
 {
   "name": "claude-whisper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Dynamic runtime instructions for Claude Code. CLAUDE.md is your constitution — whispers are your mood.",
   "type": "module",
   "bin": {
