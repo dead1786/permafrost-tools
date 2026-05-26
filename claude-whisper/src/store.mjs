@@ -11,7 +11,7 @@ export function getStoreDir() {
 
 
 function isValidWhisper(w) {
-  return w && typeof w.id === 'number' && typeof w.text === 'string' && w.id > 0;
+  return w && typeof w.id === 'number' && typeof w.text === 'string' && w.id > 0 && w.text.trim().length > 0;
 }
 
 export function isExpired(w) {
@@ -35,11 +35,13 @@ export function saveWhispers(whispers) {
 }
 
 export function addWhisper(text, { ttlHours } = {}) {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error('Whisper text cannot be empty.');
   const whispers = getWhispers({ includeExpired: true });
   const id = whispers.length > 0
     ? Math.max(...whispers.map(w => w.id)) + 1
     : 1;
-  const whisper = { id, text, active: true, created: new Date().toISOString() };
+  const whisper = { id, text: trimmed, active: true, created: new Date().toISOString() };
   if (ttlHours != null) {
     const exp = new Date();
     exp.setTime(exp.getTime() + ttlHours * 60 * 60 * 1000);
