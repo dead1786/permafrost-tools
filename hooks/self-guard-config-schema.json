@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "self-guard-config-schema.json",
+  "title": "self-guard configuration",
+  "description": "Configuration schema for self-guard.py — AI behavior guard hook for Claude Code.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference."
+    },
+    "_comment": {
+      "type": "string",
+      "description": "Human-readable description of this config file."
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Master switch. Set to false to disable all detection without removing the hook."
+    },
+    "mode_f": {
+      "type": "object",
+      "description": "Mode F: Ask instead of do. Detects responses that ask 'want me to...?' instead of acting.",
+      "additionalProperties": false,
+      "properties": {
+        "_comment": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Python regex patterns (English) that match ask-instead-of-do phrasing."
+        },
+        "patterns_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Python regex patterns (Chinese) that match ask-instead-of-do phrasing."
+        },
+        "warning": {
+          "type": "string",
+          "description": "Message shown to the model when Mode F is triggered."
+        }
+      }
+    },
+    "mode_g": {
+      "type": "object",
+      "description": "Mode G: Acknowledge without action. Detects text-only responses when user requests a change.",
+      "additionalProperties": false,
+      "properties": {
+        "_comment": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true },
+        "change_indicators": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the user message that signal a change/update request (English)."
+        },
+        "change_indicators_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the user message that signal a change/update request (Chinese)."
+        },
+        "ack_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the assistant message that indicate a text-only acknowledgment (English)."
+        },
+        "ack_patterns_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the assistant message that indicate a text-only acknowledgment (Chinese)."
+        },
+        "warning": {
+          "type": "string",
+          "description": "Message shown to the model when Mode G is triggered."
+        }
+      }
+    },
+    "mode_e": {
+      "type": "object",
+      "description": "Mode E: Sycophancy. Detects immediate agreement after user challenge with no analysis.",
+      "additionalProperties": false,
+      "properties": {
+        "_comment": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true },
+        "surrender_threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2,
+          "description": "Minimum number of surrender patterns required to trigger detection."
+        },
+        "max_response_length": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 200,
+          "description": "Responses shorter than this (in characters) with enough surrender patterns are flagged."
+        },
+        "challenge_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the user message indicating a challenge (English)."
+        },
+        "challenge_patterns_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the user message indicating a challenge (Chinese)."
+        },
+        "surrender_patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the assistant message that signal capitulation (English)."
+        },
+        "surrender_patterns_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns in the assistant message that signal capitulation (Chinese)."
+        },
+        "warning": {
+          "type": "string",
+          "description": "Message shown to the model when Mode E is triggered."
+        }
+      }
+    },
+    "passive_wait": {
+      "type": "object",
+      "description": "Passive waiting: Detects deferral language without concrete justification.",
+      "additionalProperties": false,
+      "properties": {
+        "_comment": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns that indicate deferral (English). e.g. 'tomorrow', 'later'."
+        },
+        "patterns_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Patterns that indicate deferral (Chinese)."
+        },
+        "action_overrides": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "If any of these patterns also appear, the deferral is considered intentional and not flagged (English)."
+        },
+        "action_overrides_zh": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "If any of these patterns also appear, the deferral is considered intentional and not flagged (Chinese)."
+        },
+        "warning": {
+          "type": "string",
+          "description": "Message shown to the model when passive wait is triggered."
+        }
+      }
+    }
+  }
+}
