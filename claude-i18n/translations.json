@@ -1,5 +1,5 @@
 {
-  "_version": "2.1.101",
+  "_version": "2.1.178",
   "_description": "Claude Code 繁體中文翻譯對照表。key=原文, value=譯文。逐一字串替換, 不依賴程式碼結構。",
   "_usage": "新增翻譯: 加一組 key-value。官方更新後: 跑 scan 找新英文字串, 加進來。",
   "_origin": "kai._.97",

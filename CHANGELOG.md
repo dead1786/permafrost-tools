@@ -6,11 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-24
+
 ### Fixed
 - **claude-whisper**: Add trailing newline to hook stdout so whispers are cleanly separated from user prompt on injection
 - **claude-whisper**: Trim whitespace from whisper text in `addWhisper`; reject empty or whitespace-only whispers in both `addWhisper` and `isValidWhisper`
 - **claude-whisper**: Correct `hookTimeout` in `package.json` from `2000` to `2` (unit is seconds, matching Claude Code hook config)
-- **claude-i18n**: Bump verified version to 2.1.114 — translations confirmed working on current release
+
+### Changed
+- **claude-i18n**: Bump verified version to 2.1.178 — translations confirmed working on current Claude Code release
+- **repo**: Remove stale RELEASE_NOTES_DRAFT.md (internal draft file not intended for publication)
 
 ## [0.3.1] - 2026-04-08
 
@@ -65,7 +70,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **pitfall-tracker**: AI mistake tracker with recurring pattern detection, 3-strike flagging, 5-strike escalation
 - Initial project structure with MIT license
 
-[Unreleased]: https://github.com/dead1786/permafrost-tools/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/dead1786/permafrost-tools/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/dead1786/permafrost-tools/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/dead1786/permafrost-tools/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/dead1786/permafrost-tools/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dead1786/permafrost-tools/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dead1786/permafrost-tools/releases/tag/v0.1.0
