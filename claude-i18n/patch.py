@@ -1,5 +1,5 @@
 """
-Claude Code i18n Patch‍‌​‍​‌ — 繁體中文化工具
+Claude Code i18n Patch — 繁體中文化工具
 使用對照表逐一替換字串，不依賴程式碼結構，官方更新後只需更新對照表。
 支援 npm 安裝版（cli.js）及 winget 安裝版（claude.exe binary）。
 

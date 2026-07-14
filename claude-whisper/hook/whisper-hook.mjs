@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * claude-whisper​‍‌​‌‍​‌ hook — UserPromptSubmit
+ * claude-whisper hook — UserPromptSubmit
  * Reads whispers from store and prints to stdout.
  * Claude Code injects stdout into model context on exit 0.
  *

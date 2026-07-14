@@ -1,4 +1,4 @@
-# 🤫​‌‍​‍‌ claude-whisper
+# 🤫 claude-whisper
 
 **Dynamic runtime instructions for Claude Code.**
 

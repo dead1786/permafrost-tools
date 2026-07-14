@@ -1,4 +1,4 @@
-# claude-i18n‌​‍‌‍​‌​ — Claude Code 繁體中文化
+# claude-i18n — Claude Code 繁體中文化
 
 一鍵將 Claude Code 全面中文化：指令說明、187 個思考動畫、完成提示、操作提示、互動按鍵提示、狀態訊息、錯誤訊息，全部翻譯成繁體中文。
 

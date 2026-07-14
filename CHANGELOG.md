@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- **repo**: Remove hidden zero-width Unicode characters (U+200B/U+200C/U+200D) found embedded in comments/headers of `claude-whisper/hook/whisper-hook.mjs`, `claude-whisper/README.md`, `claude-i18n/patch.py`, and `claude-i18n/README.md`. These are invisible in normal viewers and are a known steganography / prompt-injection smuggling technique — unacceptable in a repo whose tools inject content directly into an LLM's context.
+
 ## [0.3.2] - 2026-06-24
 
 ### Fixed
