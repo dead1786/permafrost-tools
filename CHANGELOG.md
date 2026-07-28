@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **self-guard**: `hooks/install.py` — one-click installer that copies `self-guard.py` + config into `~/.claude/hooks/` and registers it in `settings.json`. Appends a new matcher-group entry to `hooks.Stop` instead of overwriting the array, so any Stop hooks you already have (yours or another tool's) are preserved. Refuses to touch `settings.json` if it can't be parsed, rather than risk clobbering it. `--status` / `--uninstall` included.
+
+### Fixed
+- **self-guard**: README's manual-install JSON example was missing the nested `"hooks": [...]` array that Claude Code's real settings.json schema requires for every hook event (confirmed against current Claude Code hook documentation and a live `hooks.Stop` config) — `"Stop": [{"type": "command", ...}]` is not a valid entry shape; it needs to be `"Stop": [{"hooks": [{"type": "command", ...}]}]`. Following the old snippet literally could silently fail to register the hook, or clobber an existing `hooks.Stop` array if the user pasted it in as a full replacement. The installer above always emits the correct shape.
+
 ### Security
 - **repo**: Remove hidden zero-width Unicode characters (U+200B/U+200C/U+200D) found embedded in comments/headers of `claude-whisper/hook/whisper-hook.mjs`, `claude-whisper/README.md`, `claude-i18n/patch.py`, and `claude-i18n/README.md`. These are invisible in normal viewers and are a known steganography / prompt-injection smuggling technique — unacceptable in a repo whose tools inject content directly into an LLM's context.
 

@@ -94,7 +94,7 @@ python patch.py --dry-run    # Preview without modifying
 
 | Tool | What It Does | Install |
 |------|-------------|---------|
-| **[self-guard](hooks/)** | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Config-driven, 4 detection modes. | Copy to `~/.claude/hooks/` |
+| **[self-guard](hooks/)** | Detects bad AI behavior — sycophancy, asking instead of doing, acknowledging without acting. Config-driven, 4 detection modes. | `python hooks/install.py` |
 
 ### Standalone Tools
 
@@ -134,25 +134,47 @@ cw status               # Check installation
 ### Self-Guard Hook
 
 ```bash
-# Copy files
-cp hooks/self-guard.py hooks/self-guard-config.json ~/.claude/hooks/
+# One-click install: copies self-guard.py + config into ~/.claude/hooks/
+# and registers it in ~/.claude/settings.json (appends to any existing
+# Stop hooks — it will not overwrite hooks you already have configured)
+python hooks/install.py
 
-# Add to ~/.claude/settings.json
+# Check status / remove
+python hooks/install.py --status
+python hooks/install.py --uninstall
 ```
+
+<details>
+<summary>Manual install (if you'd rather edit settings.json by hand)</summary>
+
+```bash
+cp hooks/self-guard.py hooks/self-guard-config.json hooks/self-guard-config-schema.json ~/.claude/hooks/
+```
+
+Add a **new entry** to the `hooks.Stop` array in `~/.claude/settings.json` — note the
+nested `"hooks"` array; a hook definition can't sit directly in `Stop` without it,
+and if you already have other Stop hooks, add this as one more array element rather
+than replacing the array:
 
 ```json
 {
   "hooks": {
     "Stop": [
       {
-        "type": "command",
-        "command": "python ~/.claude/hooks/self-guard.py",
-        "timeout": 5
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ~/.claude/hooks/self-guard.py",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
 }
 ```
+
+</details>
 
 **What it catches:**
 - **Sycophancy** — AI immediately agrees when challenged, no analysis
