@@ -88,8 +88,10 @@ python patch.py --dry-run --winget
 python patch.py --restore
 python patch.py --restore --winget
 
-# 掃描未翻譯的指令（npm 版）
+# 掃描未翻譯的指令（自動偵測 npm/winget）
 python patch.py --scan
+python patch.py --scan --winget   # 強制掃描 winget binary
+python patch.py --scan --npm      # 強制掃描 npm cli.js
 
 # 列出翻譯對照表
 python patch.py --list
@@ -129,8 +131,10 @@ winget 安裝的 Claude Code 是打包好的二進位檔（`claude.exe`）。中
 
 **winget 版：**
 1. 更新 Claude Code：`winget upgrade Anthropic.ClaudeCode`（更新後需重新 patch）
-2. 重新套用：`python patch.py --winget`
-3. 備份檔為 `claude.exe.bak`，可用 `--restore --winget` 還原
+2. 執行 `python patch.py --scan --winget` 查看目前翻譯覆蓋率、有無新指令
+3. 如果有新指令，在 `translations.json` 中新增翻譯
+4. 重新套用：`python patch.py --winget`
+5. 備份檔為 `claude.exe.bak`，可用 `--restore --winget` 還原
 
 ## 自動維護（可選）
 

@@ -11,7 +11,9 @@ Usage:
   python patch.py --dry-run --winget # 預覽 winget 版
   python patch.py --restore          # 還原備份
   python patch.py --restore --winget # 還原 winget 備份
-  python patch.py --scan             # 掃描未翻譯的指令
+  python patch.py --scan             # 掃描未翻譯的指令（自動偵測 npm/winget）
+  python patch.py --scan --winget    # 強制掃描 winget binary
+  python patch.py --scan --npm       # 強制掃描 npm cli.js
   python patch.py --list             # 列出對照表
 """
 
@@ -478,32 +480,36 @@ def restore():
         sys.exit(1)
 
 
-def scan():
-    """Scan for untranslated commands in cli.js."""
-    cli_js = find_cli_js()
-    if not cli_js:
-        print("ERROR: 找不到 cli.js")
-        sys.exit(1)
+SCAN_PATTERN = (
+    r'type:\s*["\'](?:local|prompt|local-jsx)["\']\s*,\s*name:\s*'
+    r'["\']([\w\(\)\-一-鿿]+)["\']\s*,\s*description:\s*["\'](.*?)["\']'
+)
 
-    with open(cli_js, "r", encoding="utf-8") as f:
-        content = f.read()
 
-    pattern = r'type:\s*["\'](?:local|prompt|local-jsx)["\']\s*,\s*name:\s*["\']([\w\(\)\-\u4e00-\u9fff]+)["\']\s*,\s*description:\s*["\'](.*?)["\']'
+def _scan_content(content, require_zh_name):
+    """Shared scan logic over decoded source text.
 
+    require_zh_name=True (npm): a command only counts as translated if both
+    the name (e.g. "clear(清除)") and description are Chinese.
+    require_zh_name=False (winget): names are intentionally kept English
+    (byte-length constraint on the packed binary — see the binary_names
+    note in translations.json), so only the description decides status.
+    """
     zh_count = 0
     en_count = 0
     print("=== 未翻譯的指令 ===")
-    for m in re.finditer(pattern, content):
+    for m in re.finditer(SCAN_PATTERN, content):
         name = m.group(1)
         desc = m.group(2)[:60]
-        has_zh_name = any('\u4e00' <= c <= '\u9fff' for c in name)
-        has_zh_desc = any('\u4e00' <= c <= '\u9fff' for c in desc)
-        if has_zh_name and has_zh_desc:
+        has_zh_name = any('一' <= c <= '鿿' for c in name)
+        has_zh_desc = any('一' <= c <= '鿿' for c in desc)
+        is_translated = has_zh_desc and (has_zh_name or not require_zh_name)
+        if is_translated:
             zh_count += 1
         else:
             en_count += 1
             status = []
-            if not has_zh_name:
+            if require_zh_name and not has_zh_name:
                 status.append("名稱")
             if not has_zh_desc:
                 status.append("說明")
@@ -512,6 +518,40 @@ def scan():
     total = zh_count + en_count
     pct = zh_count * 100 // total if total else 0
     print(f"\n中文: {zh_count}, 英文: {en_count}, 覆蓋率: {zh_count}/{total} ({pct}%)")
+
+
+def scan():
+    """Scan for untranslated commands in cli.js (npm version)."""
+    cli_js = find_cli_js()
+    if not cli_js:
+        print("ERROR: 找不到 cli.js")
+        sys.exit(1)
+
+    with open(cli_js, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    _scan_content(content, require_zh_name=True)
+
+
+def scan_winget():
+    """Scan for untranslated commands in the winget claude.exe binary.
+
+    The packed binary isn't valid UTF-8 throughout (native executable with
+    embedded JS string literals), so it's decoded leniently with
+    errors="ignore" — good enough for locating readable command/description
+    text; same tolerance level as the byte-level replacement already used
+    in apply_binary_translations.
+    """
+    exe = find_winget_exe()
+    if not exe:
+        print("ERROR: 找不到 winget 版的 claude.exe")
+        sys.exit(1)
+
+    print(f"claude.exe: {exe}")
+    with open(exe, "rb") as f:
+        content = f.read().decode("utf-8", errors="ignore")
+
+    _scan_content(content, require_zh_name=False)
 
 
 def list_translations():
@@ -568,7 +608,19 @@ def main():
         else:
             restore()
     elif "--scan" in args:
-        scan()
+        if force_winget:
+            scan_winget()
+        elif force_npm:
+            scan()
+        else:
+            mode = auto_detect_mode()
+            if mode == "winget":
+                scan_winget()
+            elif mode == "npm":
+                scan()
+            else:
+                print("ERROR: 找不到 Claude Code 安裝")
+                sys.exit(1)
     elif "--list" in args:
         list_translations()
     else:

@@ -9,12 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - **self-guard**: `hooks/install.py` — one-click installer that copies `self-guard.py` + config into `~/.claude/hooks/` and registers it in `settings.json`. Appends a new matcher-group entry to `hooks.Stop` instead of overwriting the array, so any Stop hooks you already have (yours or another tool's) are preserved. Refuses to touch `settings.json` if it can't be parsed, rather than risk clobbering it. `--status` / `--uninstall` included.
 - **ci**: Add GitHub Actions workflow (`.github/workflows/ci.yml`) — Python syntax + ruff lint, Node.js syntax checks, cross-platform (Ubuntu/Windows/macOS) CLI smoke tests for claude-whisper, self-guard, and the new installer, plus the hidden zero-width character scan below. *(Committed locally; not yet pushed — see repo note about the PAT `workflow` scope.)*
+- **claude-i18n**: `--scan` now supports the winget `claude.exe` binary (`patch.py --scan --winget`, or auto-detected when only a winget install is present). Previously `--scan` only understood the npm `cli.js` and hard-errored (`找不到 cli.js`) on winget-only machines — the exact setup used by the majority of Windows users this tool targets — leaving them with no way to detect newly-added commands after a `winget upgrade` short of a manual diff. The winget scan decodes the packed binary leniently (`errors="ignore"`) and judges translation status by description only, since command *names* are intentionally left in English in binary builds (byte-length constraint — see `binary_names` note in `translations.json`), unlike the npm scan which requires both name and description to be Chinese.
 
 ### Fixed
 - **self-guard**: README's manual-install JSON example was missing the nested `"hooks": [...]` array that Claude Code's real settings.json schema requires for every hook event (confirmed against current Claude Code hook documentation and a live `hooks.Stop` config) — `"Stop": [{"type": "command", ...}]` is not a valid entry shape; it needs to be `"Stop": [{"hooks": [{"type": "command", ...}]}]`. Following the old snippet literally could silently fail to register the hook, or clobber an existing `hooks.Stop` array if the user pasted it in as a full replacement. The installer above always emits the correct shape.
 
 ### Security
 - **repo**: Remove hidden zero-width Unicode characters (U+200B/U+200C/U+200D) found embedded in comments/headers of `claude-whisper/hook/whisper-hook.mjs`, `claude-whisper/README.md`, `claude-i18n/patch.py`, and `claude-i18n/README.md`. These are invisible in normal viewers and are a known steganography / prompt-injection smuggling technique — unacceptable in a repo whose tools inject content directly into an LLM's context.
+
+### Changed
+- **claude-i18n**: Bump verified version to 2.1.219 — ran the new `--scan --winget` against a live winget install on that release and confirmed 100% description coverage (110/110), so the existing translation table still applies cleanly; no translation content changed.
+- **claude-whisper**: Re-verified compatible with Claude Code 2.1.219 — the hook only depends on the `UserPromptSubmit` event firing and stdout being captured on exit 0 (it doesn't read or depend on any stdin field), so it isn't affected by hook-input-schema changes between releases.
 
 ## [0.3.2] - 2026-06-24
 
