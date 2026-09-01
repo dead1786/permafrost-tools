@@ -98,7 +98,8 @@ export function uninstall() {
   }
 
   writeSettings(settings);
-  return settings.hooks?.UserPromptSubmit?.length !== before;
+  const after = settings.hooks?.UserPromptSubmit?.length ?? 0;
+  return after !== before;
 }
 
 export function isInstalled() {
