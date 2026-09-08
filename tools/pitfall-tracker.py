@@ -78,11 +78,26 @@ def write_file(path: str, content: str) -> None:
 
 
 def load_json(path: str) -> Dict[str, Any]:
-    """Load a JSON file, return default structure if missing."""
+    """Load a JSON file, return default structure if missing or corrupt.
+
+    Consistent with memory-gc.py's load_index() and self-guard.py's
+    load_config(): a truncated/empty/invalid queue file must not crash
+    the CLI. Falls back to the default structure and warns on stderr so
+    the corruption isn't silently lost either.
+    """
     if not os.path.exists(path):
         return {"items": []}
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Warning: {path} is not valid JSON ({e}). Using an empty queue.", file=sys.stderr)
+        return {"items": []}
+    if not isinstance(data, dict):
+        print(f"Warning: {path} does not contain a JSON object. Using an empty queue.", file=sys.stderr)
+        return {"items": []}
+    data.setdefault("items", [])
+    return data
 
 
 def save_json(path: str, data: Dict[str, Any]) -> None:

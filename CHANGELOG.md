@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - **self-guard**: README's manual-install JSON example was missing the nested `"hooks": [...]` array that Claude Code's real settings.json schema requires for every hook event (confirmed against current Claude Code hook documentation and a live `hooks.Stop` config) — `"Stop": [{"type": "command", ...}]` is not a valid entry shape; it needs to be `"Stop": [{"hooks": [{"type": "command", ...}]}]`. Following the old snippet literally could silently fail to register the hook, or clobber an existing `hooks.Stop` array if the user pasted it in as a full replacement. The installer above always emits the correct shape.
+- **pitfall-tracker**: `load_json()` crashed with an uncaught `json.JSONDecodeError` on a missing-but-existing, empty, or corrupted `evolution-queue.json` (e.g. `evolve`/`scan`/`stats` right after a killed write). Every other JSON loader in this repo (`memory-gc.py`'s `load_index()`, `self-guard.py`'s `load_config()`, `claude-whisper`'s `store.mjs`) already degrades gracefully on bad JSON — `pitfall-tracker.py` was the outlier. Now catches the error, warns on stderr, and falls back to an empty queue instead of taking down the whole CLI.
+
+### Verified
+- **claude-whisper**: Re-checked against Claude Code 2.1.258 (installed) / 2.1.263 (latest on npm) — hook still only depends on `UserPromptSubmit` firing + stdout on exit 0, unaffected by hook-input-schema changes.
+- **self-guard**: Fed `self-guard.py` a live-shaped `Stop` hook payload including the newer `effort` and `turn_number` fields (per current Claude Code hook docs) — handled cleanly via `.get()`, no changes needed.
+- **claude-i18n**: `--scan --winget` re-run against a local winget install — 110/110 (100%) description coverage confirmed, translation table still applies cleanly.
 
 ### Security
 - **repo**: Remove hidden zero-width Unicode characters (U+200B/U+200C/U+200D) found embedded in comments/headers of `claude-whisper/hook/whisper-hook.mjs`, `claude-whisper/README.md`, `claude-i18n/patch.py`, and `claude-i18n/README.md`. These are invisible in normal viewers and are a known steganography / prompt-injection smuggling technique — unacceptable in a repo whose tools inject content directly into an LLM's context.
