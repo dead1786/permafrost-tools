@@ -75,7 +75,13 @@ switch (command) {
       log(`${YELLOW}Already installed.${RESET} Whisper hook is active.`);
       break;
     }
-    const result = install();
+    let result;
+    try {
+      result = install();
+    } catch (e) {
+      log(`${RED}Error:${RESET} ${e.message}`);
+      process.exit(1);
+    }
     log();
     log(`${GREEN}${BOLD}Installed.${RESET}`);
     log(`  Hook: ${DIM}${result.hookPath}${RESET}`);
@@ -195,7 +201,17 @@ switch (command) {
   }
 
   case 'uninstall': {
-    uninstall();
+    let removed;
+    try {
+      removed = uninstall();
+    } catch (e) {
+      log(`${RED}Error:${RESET} ${e.message}`);
+      process.exit(1);
+    }
+    if (!removed) {
+      log(`${YELLOW}Nothing to uninstall.${RESET} Whisper hook was not registered in Claude Code settings.`);
+      break;
+    }
     log(`${RED}Uninstalled.${RESET} Whisper hook removed from Claude Code settings.`);
     log(`${DIM}Your whispers are still in ~/.claude-whisper/ if you want them later.${RESET}`);
     break;
