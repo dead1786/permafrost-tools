@@ -89,6 +89,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Verify Python tools load
+        shell: bash
         run: |
           python -c "exec(open('hooks/self-guard.py').read().split('def load_config')[0], {'__file__': 'hooks/self-guard.py', '__name__': 'self_guard_check'})"
           python tools/memory-gc.py stats 2>/dev/null || true
