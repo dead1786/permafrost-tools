@@ -51,6 +51,7 @@ jobs:
           node --check claude-whisper/src/setup.mjs
           node --check claude-whisper/hook/whisper-hook.mjs
           node --check claude-whisper/test/setup.test.mjs
+          node --check claude-whisper/test/hook.test.mjs
 
   test-whisper-cli:
     name: Test claude-whisper CLI
@@ -72,7 +73,7 @@ jobs:
           node claude-whisper/bin/cli.mjs version
 
       - name: Test settings.json install/uninstall (isolated HOME)
-        run: node --test claude-whisper/test/setup.test.mjs
+        run: node --test claude-whisper/test/setup.test.mjs claude-whisper/test/hook.test.mjs
 
   test-python-compat:
     name: Test Python compatibility

@@ -21,8 +21,13 @@ try {
   process.exit(0);
 }
 
+// The store is user-editable; never let a malformed entry crash the hook
+// (a non-zero exit would surface as a hook error on every prompt).
+if (!Array.isArray(whispers)) process.exit(0);
+
 const now = new Date();
 const active = whispers.filter(w =>
+  w && typeof w.text === 'string' && w.text.trim() !== '' &&
   w.active !== false &&
   (!w.expires || new Date(w.expires) > now)
 );
