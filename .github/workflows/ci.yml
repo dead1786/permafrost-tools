@@ -163,6 +163,9 @@ jobs:
           echo "Result: $RESULT"
           echo "$RESULT" | python -c "import sys,json; d=json.load(sys.stdin); assert d.get('decision','')!='block', f'Unexpected block: {d}'"
 
+      - name: Test against Claude Code's real nested-JSONL transcript layout
+        run: python -m unittest discover -s hooks/tests -v
+
       - name: Test re-entry guard (stop_hook_active)
         run: |
           RESULT=$(echo '{"stop_hook_active": true, "last_assistant_message": "Want me to fix that?"}' | python hooks/self-guard.py)

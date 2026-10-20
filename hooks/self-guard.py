@@ -51,11 +51,35 @@ def read_stdin():
         return {}
 
 
-def load_transcript_tail(transcript_path, n=8):
+def normalize_entry(obj):
+    """Return a flat {"role", "content"} message from one transcript entry.
+
+    Claude Code's JSONL transcript nests the message:
+        {"type": "assistant", "message": {"role": "assistant", "content": [...]}, ...}
+    and also contains non-message lines (queue operations, summaries, ...).
+    Simpler layouts put "role" at the top level. Returns None for
+    entries that are not conversation messages.
+    """
+    if not isinstance(obj, dict):
+        return None
+    inner = obj.get("message")
+    if isinstance(inner, dict) and inner.get("role") in ("user", "assistant"):
+        return inner
+    if obj.get("role") in ("user", "assistant"):
+        return obj
+    return None
+
+
+def load_transcript_tail(transcript_path, n=30):
     """Read the last n messages from the transcript file.
 
-    Supports both JSON array/object format and JSONL format
-    (Claude Code uses JSONL: one JSON object per line).
+    Supports both JSON array/object layouts and JSONL (Claude Code uses
+    JSONL: one JSON object per line, with the message nested under a
+    "message" key - see normalize_entry).
+
+    n is larger than the number of turns we inspect because Claude Code
+    writes each assistant content block (text, every tool_use) and each
+    tool_result as its own line.
     """
     if not transcript_path or not os.path.exists(transcript_path):
         return []
@@ -78,11 +102,11 @@ def load_transcript_tail(transcript_path, n=8):
             if not line:
                 continue
             try:
-                obj = json.loads(line)
-                if isinstance(obj, dict) and "role" in obj:
-                    messages.append(obj)
+                msg = normalize_entry(json.loads(line))
             except json.JSONDecodeError:
                 continue
+            if msg is not None:
+                messages.append(msg)
         return messages[-n:]
     except Exception:
         return []
@@ -116,18 +140,46 @@ def has_tool_use(msg):
     return False
 
 
+def is_tool_result_only(msg):
+    """True for user-role messages that only carry tool_result blocks.
+
+    Claude Code records tool output as a "user" message; it is not something
+    the human typed, so it must not be treated as the user's instruction.
+    """
+    content = msg.get("content", "")
+    if not isinstance(content, list) or not content:
+        return False
+    return all(isinstance(b, dict) and b.get("type") == "tool_result" for b in content)
+
+
 def find_last_pair(messages):
-    """Find the last assistant message and the user message before it."""
+    """Find the last assistant message and the human user message before it."""
     last_assistant = None
     last_user = None
     for msg in reversed(messages):
         role = msg.get("role", "")
         if role == "assistant" and last_assistant is None:
             last_assistant = msg
-        elif role == "user" and last_assistant is not None and last_user is None:
+        elif (
+            role == "user"
+            and last_assistant is not None
+            and last_user is None
+            and not is_tool_result_only(msg)
+        ):
             last_user = msg
             break
     return last_assistant, last_user
+
+
+def turn_used_tools(messages):
+    """True if any assistant message after the last human prompt used a tool."""
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        if role == "user" and not is_tool_result_only(msg):
+            return False
+        if role == "assistant" and has_tool_use(msg):
+            return True
+    return False
 
 
 def matches_any(text, patterns, flags=re.IGNORECASE | re.MULTILINE):
@@ -180,8 +232,10 @@ def check_mode_g(messages, cfg):
     if not last_assistant or not last_user:
         return False
 
-    # If assistant used tools, it's not just acknowledging
-    if has_tool_use(last_assistant):
+    # If the assistant used tools anywhere in this turn, it's not just
+    # acknowledging (Claude Code logs each content block as its own line, so
+    # the final text block is a separate message from the tool_use blocks).
+    if has_tool_use(last_assistant) or turn_used_tools(messages):
         return False
 
     user_text = extract_text(last_user)
@@ -292,7 +346,7 @@ def main():
     transcript_path = input_data.get("transcript_path", "")
     messages = []
     if transcript_path:
-        messages = load_transcript_tail(transcript_path, n=8)
+        messages = load_transcript_tail(transcript_path)
     if not messages:
         messages = input_data.get("messages", [])
 
